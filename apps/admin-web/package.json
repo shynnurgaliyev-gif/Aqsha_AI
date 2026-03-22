@@ -1,0 +1,12 @@
+{
+  "name": "@aqsha-ai/admin-web",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "echo admin-web dev is not configured yet",
+    "build": "echo admin-web build is not configured yet",
+    "lint": "echo admin-web lint is not configured yet",
+    "typecheck": "echo admin-web typecheck is not configured yet",
+    "test": "echo admin-web test is not configured yet"
+  }
+}

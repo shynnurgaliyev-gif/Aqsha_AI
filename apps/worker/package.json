@@ -1,0 +1,12 @@
+{
+  "name": "@aqsha-ai/worker",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "echo worker dev is not configured yet",
+    "build": "echo worker build is not configured yet",
+    "lint": "echo worker lint is not configured yet",
+    "typecheck": "echo worker typecheck is not configured yet",
+    "test": "echo worker test is not configured yet"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@aqsha-ai/config",
+  "private": true,
+  "version": "0.1.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "echo config build is not configured yet",
+    "lint": "echo config lint is not configured yet",
+    "typecheck": "echo config typecheck is not configured yet",
+    "test": "echo config test is not configured yet"
+  }
+}

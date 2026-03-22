@@ -1,0 +1,13 @@
+{
+  "name": "@aqsha-ai/database",
+  "private": true,
+  "version": "0.1.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "echo database build is not configured yet",
+    "lint": "echo database lint is not configured yet",
+    "typecheck": "echo database typecheck is not configured yet",
+    "test": "echo database test is not configured yet"
+  }
+}
