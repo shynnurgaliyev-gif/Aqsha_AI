@@ -5,9 +5,13 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "echo shared build is not configured yet",
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
     "lint": "echo shared lint is not configured yet",
-    "typecheck": "echo shared typecheck is not configured yet",
     "test": "echo shared test is not configured yet"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
   }
 }

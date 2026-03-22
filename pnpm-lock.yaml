@@ -27,7 +27,11 @@ importers:
 
   packages/database: {}
 
-  packages/shared: {}
+  packages/shared:
+    devDependencies:
+      typescript:
+        specifier: ^5.4.5
+        version: 5.9.3
 
 packages:
 
