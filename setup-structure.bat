@@ -1,49 +1,149 @@
 @echo off
 
-REM === APPS ===
-if not exist "apps" mkdir "apps"
-if not exist "apps\bot-api" mkdir "apps\bot-api"
-if not exist "apps\worker" mkdir "apps\worker"
-if not exist "apps\admin-web" mkdir "apps\admin-web"
+REM =========================================================
+REM CREATE SOURCE DIRECTORIES
+REM =========================================================
+if not exist "apps\bot-api\src" mkdir "apps\bot-api\src"
+if not exist "apps\worker\src" mkdir "apps\worker\src"
+if not exist "apps\admin-web\src" mkdir "apps\admin-web\src"
 
-REM === PACKAGES ===
-if not exist "packages" mkdir "packages"
-if not exist "packages\config" mkdir "packages\config"
-if not exist "packages\database" mkdir "packages\database"
-if not exist "packages\shared" mkdir "packages\shared"
+if not exist "packages\config\src" mkdir "packages\config\src"
+if not exist "packages\database\src" mkdir "packages\database\src"
+if not exist "packages\shared\src" mkdir "packages\shared\src"
 
-REM === SUPABASE ===
-if not exist "supabase" mkdir "supabase"
-if not exist "supabase\migrations" mkdir "supabase\migrations"
+REM =========================================================
+REM BOT API FILES
+REM =========================================================
+(
+echo export const BOT_API_APP_NAME = 'bot-api';
+) > "apps\bot-api\src\app.ts"
 
-REM === DOCS / GITHUB ===
-if not exist "docs" mkdir "docs"
-if not exist ".github" mkdir ".github"
-if not exist ".github\workflows" mkdir ".github\workflows"
+(
+echo import { BOT_API_APP_NAME } from './app';
+echo.
+echo function bootstrap^(^) {
+echo   console.log^(`[${BOT_API_APP_NAME}] bootstrap placeholder`^);
+echo }
+echo.
+echo bootstrap^(^);
+) > "apps\bot-api\src\main.ts"
 
-REM === ROOT FILES ===
-if not exist "CLAUDE.md" type nul > "CLAUDE.md"
-if not exist "package.json" type nul > "package.json"
-if not exist "pnpm-workspace.yaml" type nul > "pnpm-workspace.yaml"
-if not exist ".env.example" type nul > ".env.example"
-if not exist ".gitignore" type nul > ".gitignore"
+(
+echo {
+echo   "extends": "../../tsconfig.base.json",
+echo   "compilerOptions": {
+echo     "rootDir": "src",
+echo     "outDir": "dist",
+echo     "noEmit": false
+echo   },
+echo   "include": ["src/**/*.ts"],
+echo   "exclude": ["dist", "node_modules"]
+echo }
+) > "apps\bot-api\tsconfig.json"
 
-REM === KEEP FILES ===
-if not exist "apps\bot-api\.gitkeep" type nul > "apps\bot-api\.gitkeep"
-if not exist "apps\worker\.gitkeep" type nul > "apps\worker\.gitkeep"
-if not exist "apps\admin-web\.gitkeep" type nul > "apps\admin-web\.gitkeep"
+REM =========================================================
+REM WORKER FILES
+REM =========================================================
+(
+echo export const WORKER_APP_NAME = 'worker';
+) > "apps\worker\src\app.ts"
 
-if not exist "packages\config\.gitkeep" type nul > "packages\config\.gitkeep"
-if not exist "packages\database\.gitkeep" type nul > "packages\database\.gitkeep"
-if not exist "packages\shared\.gitkeep" type nul > "packages\shared\.gitkeep"
+(
+echo import { WORKER_APP_NAME } from './app';
+echo.
+echo function bootstrap^(^) {
+echo   console.log^(`[${WORKER_APP_NAME}] bootstrap placeholder`^);
+echo }
+echo.
+echo bootstrap^(^);
+) > "apps\worker\src\main.ts"
 
-if not exist "docs\.gitkeep" type nul > "docs\.gitkeep"
-if not exist ".github\workflows\.gitkeep" type nul > ".github\workflows\.gitkeep"
+(
+echo {
+echo   "extends": "../../tsconfig.base.json",
+echo   "compilerOptions": {
+echo     "rootDir": "src",
+echo     "outDir": "dist",
+echo     "noEmit": false
+echo   },
+echo   "include": ["src/**/*.ts"],
+echo   "exclude": ["dist", "node_modules"]
+echo }
+) > "apps\worker\tsconfig.json"
 
-REM === FIRST MIGRATION FILE ===
-if not exist "supabase\migrations\20260322_001_init_schema.sql" type nul > "supabase\migrations\20260322_001_init_schema.sql"
+REM =========================================================
+REM ADMIN WEB PLACEHOLDER
+REM =========================================================
+if not exist "apps\admin-web\src\.gitkeep" type nul > "apps\admin-web\src\.gitkeep"
+
+(
+echo # admin-web
+echo.
+echo Placeholder for internal admin dashboard.
+echo Implementation will be added later.
+) > "apps\admin-web\README.md"
+
+REM =========================================================
+REM SHARED PACKAGE
+REM =========================================================
+(
+echo export {};
+) > "packages\shared\src\index.ts"
+
+(
+echo {
+echo   "extends": "../../tsconfig.base.json",
+echo   "compilerOptions": {
+echo     "rootDir": "src",
+echo     "outDir": "dist",
+echo     "noEmit": false
+echo   },
+echo   "include": ["src/**/*.ts"],
+echo   "exclude": ["dist", "node_modules"]
+echo }
+) > "packages\shared\tsconfig.json"
+
+REM =========================================================
+REM CONFIG PACKAGE
+REM =========================================================
+(
+echo export {};
+) > "packages\config\src\index.ts"
+
+(
+echo {
+echo   "extends": "../../tsconfig.base.json",
+echo   "compilerOptions": {
+echo     "rootDir": "src",
+echo     "outDir": "dist",
+echo     "noEmit": false
+echo   },
+echo   "include": ["src/**/*.ts"],
+echo   "exclude": ["dist", "node_modules"]
+echo }
+) > "packages\config\tsconfig.json"
+
+REM =========================================================
+REM DATABASE PACKAGE
+REM =========================================================
+(
+echo export {};
+) > "packages\database\src\index.ts"
+
+(
+echo {
+echo   "extends": "../../tsconfig.base.json",
+echo   "compilerOptions": {
+echo     "rootDir": "src",
+echo     "outDir": "dist",
+echo     "noEmit": false
+echo   },
+echo   "include": ["src/**/*.ts"],
+echo   "exclude": ["dist", "node_modules"]
+echo }
+) > "packages\database\tsconfig.json"
 
 echo.
-echo Project structure created successfully.
+echo Source skeleton created successfully.
 echo.
 pause
