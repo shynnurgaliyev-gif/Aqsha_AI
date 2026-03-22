@@ -5,9 +5,18 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "echo database build is not configured yet",
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
     "lint": "echo database lint is not configured yet",
-    "typecheck": "echo database typecheck is not configured yet",
     "test": "echo database test is not configured yet"
+  },
+  "dependencies": {
+    "@aqsha-ai/config": "workspace:*",
+    "postgres": "^3.4.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.4.5"
   }
 }

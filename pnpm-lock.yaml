@@ -25,7 +25,21 @@ importers:
         specifier: ^5.4.5
         version: 5.9.3
 
-  packages/database: {}
+  packages/database:
+    dependencies:
+      '@aqsha-ai/config':
+        specifier: workspace:*
+        version: link:../config
+      postgres:
+        specifier: ^3.4.4
+        version: 3.4.8
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.15
+      typescript:
+        specifier: ^5.4.5
+        version: 5.9.3
 
   packages/shared:
     devDependencies:
@@ -37,6 +51,10 @@ packages:
 
   '@types/node@22.19.15':
     resolution: {integrity: sha512-F0R/h2+dsy5wJAUe3tAU6oqa2qbWY5TpNfL/RGmo1y38hiyO1w3x2jPtt76wmuaJI4DQnOBu21cNXQ2STIUUWg==}
+
+  postgres@3.4.8:
+    resolution: {integrity: sha512-d+JFcLM17njZaOLkv6SCev7uoLaBtfK86vMUXhW1Z4glPWh4jozno9APvW/XKFJ3CCxVoC7OL38BqRydtu5nGg==}
+    engines: {node: '>=12'}
 
   typescript@5.9.3:
     resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
@@ -54,6 +72,8 @@ snapshots:
   '@types/node@22.19.15':
     dependencies:
       undici-types: 6.21.0
+
+  postgres@3.4.8: {}
 
   typescript@5.9.3: {}
 
