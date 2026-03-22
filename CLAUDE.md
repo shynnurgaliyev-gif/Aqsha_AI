@@ -321,3 +321,23 @@ You are an executor inside an approved architecture.
 Stay inside scope.
 Protect consistency.
 Prefer correctness over creativity.
+
+---
+
+## Project Memory Rules
+
+The following files are the persistent memory of this project:
+
+- `docs/PROJECT_STATE.md` — current phase, completed work, next step, guardrails
+- `docs/ARCHITECTURE_DECISIONS.md` — approved architectural decisions (ADR format)
+- `docs/IMPLEMENTATION_LOG.md` — factual log of accepted completed work
+
+Rules:
+
+1. Read these files before starting any meaningful implementation task.
+2. Update them only when a task result has been completed and accepted — not speculatively.
+3. Do not invent completed work that has not been verified.
+4. Do not silently rewrite or contradict prior entries.
+5. Keep all entries short, factual, and structured.
+6. If a decision in ARCHITECTURE_DECISIONS.md conflicts with a new request, flag the conflict before proceeding.
+7. PROJECT_STATE.md must reflect actual current state — update it when a phase milestone is reached.

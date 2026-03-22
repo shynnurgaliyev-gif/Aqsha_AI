@@ -1,1 +1,72 @@
-export const WORKER_APP_NAME = 'worker';
+import pino from 'pino';
+import type { AppEnv } from '@aqsha-ai/config';
+import type { DbPool } from '@aqsha-ai/database';
+
+export interface WorkerInstance {
+  start(): void;
+  stop(): Promise<void>;
+}
+
+/**
+ * Creates the worker instance.
+ *
+ * The worker runs a periodic tick every JOB_POLL_INTERVAL_MS.
+ * Concurrent ticks are prevented — if a tick is still running when
+ * the next interval fires, the new tick is skipped and a warning is logged.
+ *
+ * Job processors will be called from inside tick() in future tasks.
+ */
+export function createWorker(env: AppEnv, _db: DbPool): WorkerInstance {
+  const logger = pino({ level: env.LOG_LEVEL, name: env.APP_NAME });
+
+  let timer: ReturnType<typeof setInterval> | null = null;
+  let tickInProgress = false;
+
+  async function tick(): Promise<void> {
+    if (tickInProgress) {
+      logger.warn('Previous tick still running, skipping');
+      return;
+    }
+
+    tickInProgress = true;
+    try {
+      logger.debug('Worker tick');
+      // Job processors will be invoked here in future tasks.
+    } catch (err) {
+      logger.error({ err }, 'Unhandled error in worker tick');
+    } finally {
+      tickInProgress = false;
+    }
+  }
+
+  return {
+    start() {
+      logger.info({ pollIntervalMs: env.JOB_POLL_INTERVAL_MS }, 'Worker started');
+      timer = setInterval(() => void tick(), env.JOB_POLL_INTERVAL_MS);
+    },
+
+    async stop(): Promise<void> {
+      logger.info('Worker stopping');
+
+      if (timer !== null) {
+        clearInterval(timer);
+        timer = null;
+      }
+
+      // Wait for any in-progress tick to finish before releasing the DB pool.
+      if (tickInProgress) {
+        logger.info('Waiting for current tick to complete');
+        await new Promise<void>((resolve) => {
+          const check = setInterval(() => {
+            if (!tickInProgress) {
+              clearInterval(check);
+              resolve();
+            }
+          }, 50);
+        });
+      }
+
+      logger.info('Worker stopped');
+    },
+  };
+}
