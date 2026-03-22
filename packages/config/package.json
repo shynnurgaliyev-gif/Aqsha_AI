@@ -5,9 +5,17 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "echo config build is not configured yet",
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
     "lint": "echo config lint is not configured yet",
-    "typecheck": "echo config typecheck is not configured yet",
     "test": "echo config test is not configured yet"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.4.5"
   }
 }
