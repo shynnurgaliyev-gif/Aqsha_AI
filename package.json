@@ -1,0 +1,13 @@
+{
+  "name": "aqsha-ai",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.6.0",
+  "scripts": {
+    "dev": "echo Root dev command is not configured yet",
+    "build": "echo Root build command is not configured yet",
+    "lint": "echo Root lint command is not configured yet",
+    "typecheck": "echo Root typecheck command is not configured yet",
+    "test": "echo Root test command is not configured yet"
+  }
+}
