@@ -45,7 +45,7 @@
 
 ---
 
-## 2026-03-22 — @aqsha-ai/shared Package
+## current baseline — @aqsha-ai/shared Package
 
 **Task:** Implement shared domain enums and types package.
 
@@ -60,11 +60,11 @@
 
 **Dependencies added:** `typescript ^5.4.5` devDep only. No runtime deps.
 
-**Verification:** typecheck and build pending user run.
+**Verification:** `pnpm --filter @aqsha-ai/shared typecheck` ✓, `pnpm --filter @aqsha-ai/shared build` ✓
 
 ---
 
-## 2026-03-22 — @aqsha-ai/database Package
+## current baseline — @aqsha-ai/database Package
 
 **Task:** Implement database connection layer package.
 
@@ -82,11 +82,11 @@
 
 **Important:** `prepare: false` is set on all pools — required for Supabase PgBouncer in transaction mode.
 
-**Verification:** typecheck and build pending user run.
+**Verification:** `pnpm --filter @aqsha-ai/database typecheck` ✓, `pnpm --filter @aqsha-ai/database build` ✓
 
 ---
 
-## 2026-03-22 — apps/bot-api Skeleton
+## current baseline — apps/bot-api Skeleton
 
 **Task:** Implement initial HTTP service skeleton for the Telegram webhook backend.
 
@@ -109,11 +109,11 @@
 
 **Note:** `paths: {}` in tsconfig overrides base path aliases. Bot-api resolves workspace packages through node_modules (built dist), not source. Packages must be built before typechecking the app.
 
-**Verification:** typecheck and build pending user run.
+**Verification:** `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓
 
 ---
 
-## 2026-03-22 — apps/worker Skeleton
+## current baseline — apps/worker Skeleton
 
 **Task:** Implement initial background worker service skeleton.
 
@@ -136,4 +136,4 @@
 
 **Note:** Same `paths: {}` tsconfig pattern as bot-api. No HTTP port — Render "Background Worker" service type.
 
-**Verification:** typecheck and build pending user run.
+**Verification:** `pnpm --filter @aqsha-ai/worker typecheck` ✓, `pnpm --filter @aqsha-ai/worker build` ✓
