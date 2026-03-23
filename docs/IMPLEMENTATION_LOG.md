@@ -553,3 +553,46 @@ VALUES ('noop', 'pending', now());
 **Dependencies added:** `next@15.2.3`, `react@19.0.0`, `react-dom@19.0.0`, `postgres@3.4.5`, `@types/node`, `@types/react`, `@types/react-dom`, `typescript` (all scoped to admin-web)
 
 **Verification:** `pnpm --filter @aqsha-ai/admin-web typecheck` ✓, `pnpm --filter @aqsha-ai/admin-web build` ✓
+
+---
+
+## 2026-03-23 — CI/CD Foundation (.github/workflows)
+
+**Task:** Add GitHub Actions CI workflow to validate the monorepo on every push and PR.
+
+**Result:** Single workflow file with two jobs — `build` (typecheck + build all packages and apps) and `docker` (Docker image validation). No automatic deployment.
+
+**Files affected:**
+- `.github/workflows/ci.yml` (new)
+
+**Job: `build`** (`ubuntu-latest`, runs on all pushes and PRs targeting `main`/`dev`):
+- Node.js 24, corepack, pnpm from `packageManager` field
+- pnpm store cached by `pnpm-lock.yaml` hash
+- `pnpm install --frozen-lockfile`
+- Packages in order: `@aqsha-ai/shared build` → `@aqsha-ai/config build` → `@aqsha-ai/database build`
+- Apps: `@aqsha-ai/bot-api typecheck + build`, `@aqsha-ai/worker typecheck + build`, `@aqsha-ai/admin-web typecheck + build`
+
+**Job: `docker`** (`ubuntu-latest`, `needs: build`):
+- `docker build -f apps/bot-api/Dockerfile -t aqsha-ai/bot-api:ci .`
+- `docker build -f apps/worker/Dockerfile -t aqsha-ai/worker:ci .`
+- Images not pushed to any registry
+
+**Key behavior:**
+- Any typecheck, build, or Docker build failure fails the workflow and blocks the PR
+- `--frozen-lockfile` prevents lockfile drift from silently passing
+- `--progress=plain` makes Docker layer output readable in CI logs
+- No secrets required — build and typecheck need no env vars; Docker builds are self-contained
+
+**Dependencies added:** none (workflow only uses standard GitHub Actions)
+
+**Verification:** Workflow file reviewed. Local equivalent commands:
+- `corepack enable && corepack install`
+- `pnpm install --frozen-lockfile`
+- `pnpm --filter @aqsha-ai/shared build`
+- `pnpm --filter @aqsha-ai/config build`
+- `pnpm --filter @aqsha-ai/database build`
+- `pnpm --filter @aqsha-ai/bot-api typecheck && pnpm --filter @aqsha-ai/bot-api build`
+- `pnpm --filter @aqsha-ai/worker typecheck && pnpm --filter @aqsha-ai/worker build`
+- `pnpm --filter @aqsha-ai/admin-web typecheck && pnpm --filter @aqsha-ai/admin-web build`
+- `docker build -f apps/bot-api/Dockerfile -t aqsha-ai/bot-api:ci .`
+- `docker build -f apps/worker/Dockerfile -t aqsha-ai/worker:ci .`
