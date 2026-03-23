@@ -13,7 +13,7 @@
 
 ## Current Phase
 
-**Backend skeleton complete. Telegram webhook/core flows are next.**
+**Telegram webhook / core flows — in progress.**
 
 The approved implementation order from CLAUDE.md:
 1. ~~Lock architecture~~ ✓
@@ -40,13 +40,14 @@ The approved implementation order from CLAUDE.md:
 | `@aqsha-ai/database` | ✓ accepted | postgres.js pool, `createDbPool`, `createDbPoolFromEnv` |
 | `apps/bot-api` skeleton | ✓ accepted | Fastify v5, `/health`, bootstrap, graceful shutdown |
 | `apps/worker` skeleton | ✓ accepted | pino, poll loop, tick guard, graceful shutdown |
+| Telegram webhook foundation | ✓ accepted | `POST /telegram/webhook`, secret validation, dedup via `telegram_update_receipts`, placeholder dispatcher |
 
 ---
 
 ## Not Started
 
-- Telegram webhook handler
-- Telegram update deduplication logic (telegram_update_receipts)
+- Telegram update routing (text, voice, callback_query handlers)
+- User bootstrap / upsert on first seen
 - User session management
 - Transaction parsing (text and voice)
 - Voice transcription pipeline (ffmpeg + OpenAI Whisper)
@@ -62,12 +63,11 @@ The approved implementation order from CLAUDE.md:
 
 ## Next Recommended Step
 
-Implement Telegram webhook receiver in `apps/bot-api`:
-- register webhook endpoint (`POST /telegram/webhook`)
-- validate `X-Telegram-Bot-Api-Secret-Token` header
-- write update_id to `telegram_update_receipts` for deduplication
-- route by update type (message, voice, callback_query)
-- do not implement business logic yet — routing scaffold only
+Implement Telegram update routing and user bootstrap in `apps/bot-api`:
+- upsert user row in `users` table on first seen (by `telegram_user_id`)
+- route updates by type inside `handleTelegramUpdate` (message, voice, callback_query)
+- add stub handlers per update type
+- do not implement transaction parsing yet — routing and user upsert only
 
 ---
 

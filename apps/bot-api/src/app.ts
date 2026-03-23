@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { AppEnv } from '@aqsha-ai/config';
 import type { DbPool } from '@aqsha-ai/database';
+import { createWebhookRoute } from './telegram/webhook-route';
 
 /**
  * Creates and configures the Fastify application.
@@ -8,7 +9,7 @@ import type { DbPool } from '@aqsha-ai/database';
  * Does not start listening — call app.listen() from main.ts.
  * This separation makes the app testable without binding a port.
  */
-export function createApp(env: AppEnv, _db: DbPool): FastifyInstance {
+export function createApp(env: AppEnv, db: DbPool): FastifyInstance {
   const app = Fastify({
     logger: {
       level: env.LOG_LEVEL,
@@ -23,6 +24,9 @@ export function createApp(env: AppEnv, _db: DbPool): FastifyInstance {
       env: env.NODE_ENV,
     };
   });
+
+  // ── Telegram webhook ─────────────────────────────────────────────────────────
+  void app.register(createWebhookRoute(env, db));
 
   return app;
 }

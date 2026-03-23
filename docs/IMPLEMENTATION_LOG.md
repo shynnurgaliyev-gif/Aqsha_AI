@@ -137,3 +137,30 @@
 **Note:** Same `paths: {}` tsconfig pattern as bot-api. No HTTP port — Render "Background Worker" service type.
 
 **Verification:** `pnpm --filter @aqsha-ai/worker typecheck` ✓, `pnpm --filter @aqsha-ai/worker build` ✓
+
+---
+
+## current baseline — Telegram Webhook Foundation (apps/bot-api)
+
+**Task:** Implement Telegram webhook receiver with deduplication and placeholder dispatcher.
+
+**Result:** `POST /telegram/webhook` registered in bot-api. Validates secret header, deduplicates by `update_id` via `telegram_update_receipts`, dispatches to placeholder `handleTelegramUpdate`, always returns `{ ok: true }` to Telegram.
+
+**Files affected:**
+- `apps/bot-api/src/app.ts` (registered webhook plugin, activated `db` param)
+- `apps/bot-api/src/telegram/types.ts` (new — minimal Telegram update types + extractors)
+- `apps/bot-api/src/telegram/receipt-repository.ts` (new — `insertOrIgnoreReceipt`, `markReceiptProcessed`, `markReceiptFailed`)
+- `apps/bot-api/src/telegram/update-handler.ts` (new — placeholder `handleTelegramUpdate` dispatcher)
+- `apps/bot-api/src/telegram/webhook-route.ts` (new — Fastify plugin factory)
+
+**Key behavior:**
+- `TELEGRAM_WEBHOOK_SECRET` checked when set; skipped if unset (local dev)
+- `ON CONFLICT (update_id) DO NOTHING` prevents duplicate processing
+- Receipt marked `received` → `processed` or `failed` after dispatch
+- Always returns 200 to Telegram — errors are recorded in DB, not retried
+
+**Dependencies added:** none
+
+**Follow-up fix:** `db.json(data.payloadJson as any)` — postgres.js `JSONValue` internal type not satisfiable from user code; `as any` is the correct minimal cast.
+
+**Verification:** `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓
