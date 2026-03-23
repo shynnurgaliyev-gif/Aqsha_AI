@@ -4,6 +4,8 @@ import type { DbPool } from '@aqsha-ai/database';
 import type { TelegramUpdate, TelegramUpdateType } from './types';
 import { bootstrapUser } from './user-bootstrap-service';
 import { checkSubscriptionAccess, PAYWALL_MESSAGE } from './access-control';
+import { matchBillingCommand } from './billing/billing-command-matcher';
+import { handleBillingCommand } from './billing/billing-service';
 import { handleTextMessage } from './text-intake/handler';
 import { handleVoiceMessage } from './voice-intake/handler';
 import { handleAnalyticsQuery } from './analytics/handler';
@@ -34,6 +36,15 @@ export async function routeTelegramUpdate(
       const from = msg?.from;
       if (msg && from && !from.is_bot) {
         const { userId, currentPlanStatus } = await bootstrapUser(db, env, from);
+
+        // ── Billing commands (accessible to all users, including expired) ───────
+        // Checked before the access gate so expired users can reach the billing stub.
+        if (matchBillingCommand(msg.text ?? '')) {
+          logger.info({ updateId: update.update_id, userId }, 'Billing command received');
+          const billingResponse = await handleBillingCommand(userId, currentPlanStatus, db, logger);
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: billingResponse }, logger);
+          break;
+        }
 
         // ── Access gate ────────────────────────────────────────────────────────
         if (checkSubscriptionAccess(currentPlanStatus) === 'blocked') {

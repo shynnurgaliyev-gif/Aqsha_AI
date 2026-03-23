@@ -13,7 +13,7 @@
 
 ## Current Phase
 
-**CI/CD foundation complete. Billing and remaining admin work are next.**
+**Billing/payment stub foundation complete. Real billing integration and admin work remain.**
 
 The approved implementation order from CLAUDE.md:
 1. ~~Lock architecture~~ ✓
@@ -56,20 +56,24 @@ The approved implementation order from CLAUDE.md:
 | Subscription lifecycle foundation | ✓ accepted | `worker/src/subscriptions/lifecycle.ts` (`runSubscriptionLifecycleCheck`); single UPDATE expires trial+active subscriptions past their end date; DB trigger keeps `users.current_plan_status` aligned; wired into worker tick before scheduler |
 | Admin dashboard bootstrap | ✓ accepted | Next.js 15 + React 19 app in `apps/admin-web`; overview page with user/job/recommendation stats and recent admin events + failed jobs; `GET /api/health`; lazy postgres singleton; `force-dynamic` rendering; typecheck ✓, build ✓ |
 | CI/CD foundation | ✓ accepted | `.github/workflows/ci.yml`; two jobs: `build` (typecheck + build all packages and apps) and `docker` (Docker image validation for bot-api and worker); pnpm store cached; triggers on all pushes and PRs to main/dev |
+| Billing/payment stub foundation | ✓ accepted | `telegram/billing/`: `billing-command-matcher.ts`, `billing-formatter.ts`, `billing-service.ts`; billing commands ("оплатить", "подписка", "pay", …) checked before access gate; `admin_events` row on intent; improved paywall message; typecheck ✓, build ✓ |
 
 ---
 
 ## Not Started
 
-- Real billing / payment provider integration
+- Real billing / payment provider integration (replace stub with actual payment flow)
 - Admin dashboard: auth layer (currently no login — internal network only)
 - Admin dashboard: Dockerfile + render.yaml entry for admin-web service
+- Admin-web: fix `admin_events` query (uses wrong column names — actual schema has `user_id`, `event_source`, `event_payload`, not `actor_id`/`target_user_id`/`metadata`)
 
 ---
 
 ## Next Recommended Step
 
-Implement real billing / payment provider integration.
+Fix admin-web `admin_events` query column names (known bug: references `actor_id`/`target_user_id`/`metadata` but actual schema has `user_id`/`event_source`/`event_payload`).
+
+Then implement real billing / payment provider integration (replace stub with actual invoice/payment flow).
 
 Or extend admin-web: add Dockerfile + render.yaml entry, or add HTTP Basic Auth middleware.
 

@@ -36,12 +36,13 @@ export function checkSubscriptionAccess(planStatus: string): 'allowed' | 'blocke
 }
 
 /**
- * Stub paywall message shown to users with blocked/expired/canceled subscriptions.
+ * Paywall message shown to users with expired/blocked/canceled subscriptions.
  *
- * Payment integration is not yet implemented. This message will be replaced
- * with a real invoice link when the billing provider is integrated.
+ * Mentions the billing entry command so users know how to proceed.
+ * Payment integration is not yet implemented — no real invoice link exists yet.
  */
 export const PAYWALL_MESSAGE =
   'Ваш пробный период завершён.\n\n' +
   'Aqsha AI — 800 ₸/месяц.\n\n' +
-  'Оплата будет доступна в ближайшее время. Следите за обновлениями.';
+  'Напишите «оплатить», чтобы узнать о подписке.\n' +
+  'Приём платежей откроется в ближайшее время.';

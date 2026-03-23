@@ -596,3 +596,37 @@ VALUES ('noop', 'pending', now());
 - `pnpm --filter @aqsha-ai/admin-web typecheck && pnpm --filter @aqsha-ai/admin-web build`
 - `docker build -f apps/bot-api/Dockerfile -t aqsha-ai/bot-api:ci .`
 - `docker build -f apps/worker/Dockerfile -t aqsha-ai/worker:ci .`
+
+---
+
+## 2026-03-23 — Billing/Payment Stub Foundation (apps/bot-api)
+
+**Task:** Add a deterministic billing/payment stub flow: billing entry commands, improved paywall message, and admin_events intent logging.
+
+**Result:** Expired and blocked users can send billing commands ("оплатить", "подписка", "pay", etc.) and receive a clear stub response. Billing commands are checked before the access gate, so they work regardless of subscription status. Active/trial users pass through to normal flows unchanged. Each billing command logs a `billing_stub_intent` event to `admin_events`.
+
+**Files affected:**
+- `apps/bot-api/src/telegram/billing/billing-command-matcher.ts` (new — `matchBillingCommand(text)`, 6 exact-match tokens)
+- `apps/bot-api/src/telegram/billing/billing-formatter.ts` (new — `BILLING_STUB_RESPONSE` constant)
+- `apps/bot-api/src/telegram/billing/billing-service.ts` (new — `handleBillingCommand(userId, planStatus, db, logger)`; inserts `admin_events` row, returns stub response)
+- `apps/bot-api/src/telegram/access-control.ts` (modified — `PAYWALL_MESSAGE` improved: now mentions "напишите «оплатить»")
+- `apps/bot-api/src/telegram/update-router.ts` (modified — billing command check added in `message` case before access gate; two new imports)
+
+**Routing order after this change (message case):**
+1. `bootstrapUser` → userId, currentPlanStatus
+2. `matchBillingCommand` → if matched: `handleBillingCommand` → send → break (all users)
+3. `checkSubscriptionAccess` → if blocked: send `PAYWALL_MESSAGE` → break
+4. `handleAnalyticsQuery` / `handleTextMessage` (allowed users only)
+
+**Key behavior:**
+- Billing commands accessible to ALL users including expired/blocked — checked before access gate
+- `handleBillingCommand` inserts `(user_id, event_type='billing_stub_intent', event_source='bot', severity='info', event_payload={plan_status})` into `admin_events`
+- admin_events insert failure is caught and logged non-fatally; stub response still returned
+- Subscription status is never changed; no access is granted
+- PAYWALL_MESSAGE now includes "Напишите «оплатить»…" to guide expired users
+
+**Side-finding (not fixed in this task):** admin-web `getRecentAdminEvents` query references columns `actor_id`, `target_user_id`, `metadata` that do not exist in the actual `admin_events` schema. Actual columns: `user_id`, `event_source`, `event_payload`. Tracked in PROJECT_STATE.md "Not Started".
+
+**Dependencies added:** none
+
+**Verification:** `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓
