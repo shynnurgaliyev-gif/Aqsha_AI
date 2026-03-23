@@ -1,0 +1,179 @@
+# Render Blueprint — Aqsha AI
+# Docs: https://render.com/docs/blueprint-spec
+#
+# Secrets (marked sync: false) must be set in the Render dashboard.
+# Non-secret defaults are declared inline.
+#
+# Services defined here:
+#   - aqsha-ai-bot-api  (web service — Telegram webhook + HTTP)
+#   - aqsha-ai-worker   (background worker — job queue + scheduler)
+#
+# admin-web is not included yet (not implemented).
+
+services:
+
+  # ── Telegram Webhook / API Service ─────────────────────────────────────────
+  - type: web
+    name: aqsha-ai-bot-api
+    env: docker
+    dockerfilePath: ./apps/bot-api/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+
+      # Runtime
+      - key: NODE_ENV
+        value: production
+
+      # App
+      - key: APP_NAME
+        value: aqsha-ai-bot-api
+      - key: APP_PORT
+        value: 3000
+      - key: APP_BASE_URL
+        sync: false          # set to the Render service URL after first deploy
+      - key: APP_TIMEZONE
+        value: Asia/Almaty
+
+      # Telegram
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false          # optional; leave blank to disable secret validation
+      - key: TELEGRAM_WEBHOOK_URL
+        sync: false          # set to https://<render-url>/telegram/webhook
+
+      # Database
+      - key: DATABASE_URL
+        sync: false          # Supabase pooler (PgBouncer) URL
+      - key: DATABASE_DIRECT_URL
+        sync: false          # Supabase direct connection URL (for migrations)
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+
+      # AI
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4.1-mini
+      - key: OPENAI_TRANSCRIBE_MODEL
+        value: gpt-4o-mini-transcribe
+
+      # Voice / Audio
+      - key: FFMPEG_PATH
+        value: ffmpeg
+      - key: MAX_VOICE_FILE_SIZE_MB
+        value: 20
+
+      # Worker / Jobs
+      - key: JOB_POLL_INTERVAL_MS
+        value: 5000
+      - key: JOB_BATCH_SIZE
+        value: 10
+      - key: DAILY_RECOMMENDATION_DEFAULT_HOUR
+        value: 9
+
+      # Admin
+      - key: ADMIN_ENABLED
+        value: false
+      - key: ADMIN_PORT
+        value: 4000
+
+      # Logging
+      - key: LOG_LEVEL
+        value: info
+
+      # Billing
+      - key: BILLING_PROVIDER
+        value: stub
+      - key: TRIAL_DAYS
+        value: 7
+      - key: MONTHLY_PRICE_KZT
+        value: 800
+
+
+  # ── Background Worker ────────────────────────────────────────────────────────
+  - type: worker
+    name: aqsha-ai-worker
+    env: docker
+    dockerfilePath: ./apps/worker/Dockerfile
+    dockerContext: .
+    envVars:
+
+      # Runtime
+      - key: NODE_ENV
+        value: production
+
+      # App
+      - key: APP_NAME
+        value: aqsha-ai-worker
+      - key: APP_PORT
+        value: 3000            # unused by worker but required by parseEnv schema
+      - key: APP_BASE_URL
+        sync: false            # unused by worker but required by parseEnv schema
+      - key: APP_TIMEZONE
+        value: Asia/Almaty
+
+      # Telegram — worker sends daily recommendations directly
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false
+      - key: TELEGRAM_WEBHOOK_URL
+        sync: false
+
+      # Database
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_DIRECT_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+
+      # AI — required by parseEnv schema even if unused at runtime
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4.1-mini
+      - key: OPENAI_TRANSCRIBE_MODEL
+        value: gpt-4o-mini-transcribe
+
+      # Voice / Audio — unused by worker but required by parseEnv schema
+      - key: FFMPEG_PATH
+        value: ffmpeg
+      - key: MAX_VOICE_FILE_SIZE_MB
+        value: 20
+
+      # Worker / Jobs
+      - key: JOB_POLL_INTERVAL_MS
+        value: 5000
+      - key: JOB_BATCH_SIZE
+        value: 10
+      - key: DAILY_RECOMMENDATION_DEFAULT_HOUR
+        value: 9
+
+      # Admin
+      - key: ADMIN_ENABLED
+        value: false
+      - key: ADMIN_PORT
+        value: 4000
+
+      # Logging
+      - key: LOG_LEVEL
+        value: info
+
+      # Billing
+      - key: BILLING_PROVIDER
+        value: stub
+      - key: TRIAL_DAYS
+        value: 7
+      - key: MONTHLY_PRICE_KZT
+        value: 800
