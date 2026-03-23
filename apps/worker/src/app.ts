@@ -2,6 +2,7 @@ import pino from 'pino';
 import type { AppEnv } from '@aqsha-ai/config';
 import type { DbPool } from '@aqsha-ai/database';
 import { processJobs } from './job-queue/processor';
+import { runSubscriptionLifecycleCheck } from './subscriptions/lifecycle';
 import { runDailyRecommendationScheduler } from './daily-recommendations/scheduler';
 
 export interface WorkerInstance {
@@ -33,6 +34,7 @@ export function createWorker(env: AppEnv, db: DbPool): WorkerInstance {
     tickInProgress = true;
     try {
       logger.debug('Worker tick');
+      await runSubscriptionLifecycleCheck(db, logger);
       await runDailyRecommendationScheduler(db, logger);
       await processJobs(db, env, logger);
     } catch (err) {

@@ -13,7 +13,7 @@
 
 ## Current Phase
 
-**Deploy pipeline underway. Admin dashboard not yet started.**
+**Deploy pipeline + admin dashboard bootstrap complete. CI/CD and billing remain.**
 
 The approved implementation order from CLAUDE.md:
 1. ~~Lock architecture~~ ✓
@@ -24,8 +24,8 @@ The approved implementation order from CLAUDE.md:
 6. ~~Telegram webhook / core flows~~ ✓
 7. ~~Voice pipeline~~ ✓
 8. ~~Analytics / recommendations~~ ✓ (analytics queries, job queue, recommendation generation, real Telegram delivery)
-9. Admin dashboard — not yet started (skipped ahead)
-10. → **Deploy pipeline** ← current (Docker packaging ✓, webhook registration ✓, CI/CD pending)
+9. ~~Admin dashboard~~ ✓ (Next.js 15 bootstrap with overview stats page)
+10. ~~Deploy pipeline~~ ✓ (Docker packaging ✓, webhook registration ✓, subscription gating ✓, lifecycle ✓; CI/CD pending)
 
 ---
 
@@ -52,14 +52,18 @@ The approved implementation order from CLAUDE.md:
 | Daily recommendation scheduling foundation | ✓ accepted | `daily-recommendations/scheduler.ts`: single-SQL eligible user scan with dual dedup (daily_recommendations row + pending job); wired into worker tick before `processJobs` |
 | Docker / Render production packaging | ✓ accepted | multi-stage Dockerfiles for bot-api (with ffmpeg) and worker; `.dockerignore`; `render.yaml` blueprint with both services and all env vars |
 | Deploy readiness + Telegram webhook registration | ✓ accepted | `telegram/webhook-registration.ts` (`setWebhook`, `deleteWebhook`); bot-api now auto-registers webhook on startup when `TELEGRAM_WEBHOOK_URL` is set; aborts startup on registration failure |
+| Subscription access gating | ✓ accepted | `telegram/access-control.ts` (`checkSubscriptionAccess`, `PAYWALL_MESSAGE`); gating wired into `update-router.ts` after `bootstrapUser` for message, voice, callback_query; no extra DB query; stub paywall message for expired/blocked/canceled users |
+| Subscription lifecycle foundation | ✓ accepted | `worker/src/subscriptions/lifecycle.ts` (`runSubscriptionLifecycleCheck`); single UPDATE expires trial+active subscriptions past their end date; DB trigger keeps `users.current_plan_status` aligned; wired into worker tick before scheduler |
+| Admin dashboard bootstrap | ✓ accepted | Next.js 15 + React 19 app in `apps/admin-web`; overview page with user/job/recommendation stats and recent admin events + failed jobs; `GET /api/health`; lazy postgres singleton; `force-dynamic` rendering; typecheck ✓, build ✓ |
 
 ---
 
 ## Not Started
 
-- Billing / subscription lifecycle logic
-- Admin dashboard (apps/admin-web)
+- Real billing / payment provider integration
 - CI/CD GitHub Actions
+- Admin dashboard: auth layer (currently no login — internal network only)
+- Admin dashboard: Dockerfile + render.yaml entry for admin-web service
 
 ---
 
@@ -68,6 +72,10 @@ The approved implementation order from CLAUDE.md:
 Implement CI/CD GitHub Actions pipeline:
 - add `.github/workflows/` with a build + typecheck workflow triggered on push to `dev`
 - optionally add a deploy-on-merge-to-main workflow that triggers Render deploy hooks
+
+Or implement real billing/payment provider integration.
+
+Or extend admin-web: add Dockerfile + render.yaml entry, or add HTTP Basic Auth middleware.
 
 ---
 

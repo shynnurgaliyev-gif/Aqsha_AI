@@ -3,6 +3,7 @@ import type { AppEnv } from '@aqsha-ai/config';
 import type { DbPool } from '@aqsha-ai/database';
 import type { TelegramUpdate, TelegramUpdateType } from './types';
 import { bootstrapUser } from './user-bootstrap-service';
+import { checkSubscriptionAccess, PAYWALL_MESSAGE } from './access-control';
 import { handleTextMessage } from './text-intake/handler';
 import { handleVoiceMessage } from './voice-intake/handler';
 import { handleAnalyticsQuery } from './analytics/handler';
@@ -32,7 +33,14 @@ export async function routeTelegramUpdate(
       const msg = update.message;
       const from = msg?.from;
       if (msg && from && !from.is_bot) {
-        const { userId } = await bootstrapUser(db, env, from);
+        const { userId, currentPlanStatus } = await bootstrapUser(db, env, from);
+
+        // ── Access gate ────────────────────────────────────────────────────────
+        if (checkSubscriptionAccess(currentPlanStatus) === 'blocked') {
+          logger.info({ updateId: update.update_id, planStatus: currentPlanStatus }, 'Access blocked — paywall shown');
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: PAYWALL_MESSAGE }, logger);
+          break;
+        }
 
         // Analytics queries take priority over text intake.
         // handleAnalyticsQuery returns null if the text is not a recognised query.
@@ -54,7 +62,15 @@ export async function routeTelegramUpdate(
       const msg = update.message;
       const from = msg?.from;
       if (msg && from && !from.is_bot) {
-        const { userId } = await bootstrapUser(db, env, from);
+        const { userId, currentPlanStatus } = await bootstrapUser(db, env, from);
+
+        // ── Access gate ────────────────────────────────────────────────────────
+        if (checkSubscriptionAccess(currentPlanStatus) === 'blocked') {
+          logger.info({ updateId: update.update_id, planStatus: currentPlanStatus }, 'Access blocked — paywall shown');
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: PAYWALL_MESSAGE }, logger);
+          break;
+        }
+
         const result = await handleVoiceMessage(msg, userId, db, env, logger);
         logger.info({ updateId: update.update_id, resultKind: result.kind }, 'Voice message handled');
         await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: result.message }, logger);
@@ -65,7 +81,14 @@ export async function routeTelegramUpdate(
     case 'callback_query': {
       const from = update.callback_query?.from;
       if (from && !from.is_bot) {
-        await bootstrapUser(db, env, from);
+        const { currentPlanStatus } = await bootstrapUser(db, env, from);
+
+        // ── Access gate ────────────────────────────────────────────────────────
+        if (checkSubscriptionAccess(currentPlanStatus) === 'blocked') {
+          logger.info({ updateId: update.update_id, planStatus: currentPlanStatus }, 'Access blocked — callback query not processed');
+          // No reply for callback_query: handler not yet implemented; paywall applied silently.
+          break;
+        }
       }
       logger.info({ updateId: update.update_id }, 'Callback query received — handler not yet implemented');
       // TODO: await handleCallbackQuery(update, db, env, logger);

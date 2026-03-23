@@ -462,3 +462,94 @@ VALUES ('noop', 'pending', now());
 **Dependencies added:** none
 
 **Verification:** `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓
+
+---
+
+## 2026-03-23 — Subscription Access Gating Foundation (apps/bot-api)
+
+**Task:** Implement central subscription access-control layer in bot-api, blocking expired/blocked/canceled users before any feature handler executes.
+
+**Result:** All inbound Telegram updates (message, voice, callback_query) now pass through a subscription check immediately after user bootstrap. Blocked users receive a stub paywall message. No extra DB query — `current_plan_status` comes from the existing `bootstrapUser` upsert result.
+
+**Files affected:**
+- `apps/bot-api/src/telegram/access-control.ts` (new — `checkSubscriptionAccess(planStatus)`, `PAYWALL_MESSAGE`)
+- `apps/bot-api/src/telegram/update-router.ts` (modified — access gate added after `bootstrapUser` in message, voice, and callback_query cases)
+
+**Status decisions:**
+- `trial`, `active`, `grace`, `pending` → allowed
+- `expired`, `blocked`, `canceled` → blocked (paywall message sent)
+- unknown/future values → blocked (conservative default)
+
+**Key behavior:**
+- No extra DB query: `current_plan_status` already returned by `bootstrapUser` upsert
+- `checkSubscriptionAccess` is a pure function — no DB access, no side effects
+- Paywall message is a Russian-language stub (no real payment link yet)
+- callback_query case: access gate applied silently (no reply — handler not yet implemented)
+- `break` after paywall — handler logic does not execute for blocked users
+
+**Dependencies added:** none
+
+**Verification:** `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓
+
+---
+
+## 2026-03-23 — Subscription Lifecycle Foundation (apps/worker)
+
+**Task:** Implement deterministic subscription expiration to ensure trial and paid subscriptions do not remain active past their end dates.
+
+**Result:** Worker now transitions eligible subscriptions to `'expired'` on every tick. The existing DB trigger keeps `users.current_plan_status` aligned automatically — no extra SQL needed.
+
+**Files affected:**
+- `apps/worker/src/subscriptions/lifecycle.ts` (new — `runSubscriptionLifecycleCheck`)
+- `apps/worker/src/app.ts` (modified — `runSubscriptionLifecycleCheck` called first in tick, before scheduler)
+
+**Key behavior:**
+- Single `UPDATE public.subscriptions SET status = 'expired' WHERE is_current = true AND (trial expired OR paid expired)` covers both cases
+- Existing trigger `trg_subscriptions_sync_user_plan` fires on each updated row and writes `users.current_plan_status = 'expired'` automatically
+- Idempotent: already-expired rows don't match the WHERE clause, no double-update
+- DB failure caught and logged; does not abort the rest of the tick
+- Logs user_ids of all expired subscriptions when count > 0
+- bot-api reads `current_plan_status` from DB on every `upsertUser` call, so access gating sees the worker-updated value within one poll interval
+
+**Dependencies added:** none
+
+**Verification:** `pnpm --filter @aqsha-ai/worker typecheck` ✓, `pnpm --filter @aqsha-ai/worker build` ✓
+
+---
+
+## 2026-03-23 — Admin Dashboard Bootstrap (apps/admin-web)
+
+**Task:** Bootstrap the admin-web app as a minimal Next.js 15 + React 19 read-only dashboard showing live system stats.
+
+**Result:** Fully functional internal dashboard with an overview page and a health endpoint. Build and typecheck pass. No auth yet (internal use only for this stage).
+
+**Files affected:**
+- `apps/admin-web/package.json` (replaced stub — Next.js 15.2.3, React 19, postgres 3.4.5; real scripts)
+- `apps/admin-web/tsconfig.json` (new — standalone config; ESNext/Bundler/DOM; does not extend base)
+- `apps/admin-web/next.config.ts` (new — minimal config; `output: 'standalone'` commented out pending Docker support)
+- `apps/admin-web/src/lib/db.ts` (new — lazy `getDb()` postgres singleton; `prepare: false` for PgBouncer; global for dev hot-reload safety)
+- `apps/admin-web/src/lib/queries.ts` (new — `getUserStats`, `getJobCounts`, `getRecommendationCounts`, `getRecentAdminEvents`, `getRecentFailedJobs`)
+- `apps/admin-web/src/app/layout.tsx` (new — root layout with Aqsha AI Admin header)
+- `apps/admin-web/src/app/globals.css` (new — minimal plain CSS; status tag colour helpers)
+- `apps/admin-web/src/app/page.tsx` (new — Server Component, `force-dynamic`; overview cards + failed jobs + admin events tables)
+- `apps/admin-web/src/app/api/health/route.ts` (new — `GET /api/health`; pings DB)
+- `package.json` (root — added `pnpm.onlyBuiltDependencies: [esbuild, sharp]` to allow native build scripts)
+
+**Key behavior:**
+- `getDb()` is lazy — postgres connection not created at import time, safe for `next build` without `DATABASE_URL` present
+- All pages use `export const dynamic = 'force-dynamic'` — always server-rendered, never cached
+- Only env var required at runtime: `DATABASE_URL` (no Telegram/OpenAI keys needed)
+- `tsconfig.json` is standalone (not extending `tsconfig.base.json`) — base uses CommonJS/Node, incompatible with Next.js App Router which requires ESNext/Bundler/DOM
+- Dev port: 3001 (avoids conflict with bot-api on 3000)
+- `output: 'standalone'` disabled for now — causes EPERM symlink errors on Windows; will be re-enabled when adding a Dockerfile for admin-web
+
+**Dashboard content:**
+- Users: total count + breakdown by `current_plan_status` with percentage
+- Job queue: count by `status`
+- Daily recommendations: count by `delivery_status`
+- Recent failed jobs (last 10): id, type, attempts, error message, updated_at
+- Recent admin events (last 20): event_type, actor_id, target_user_id, created_at
+
+**Dependencies added:** `next@15.2.3`, `react@19.0.0`, `react-dom@19.0.0`, `postgres@3.4.5`, `@types/node`, `@types/react`, `@types/react-dom`, `typescript` (all scoped to admin-web)
+
+**Verification:** `pnpm --filter @aqsha-ai/admin-web typecheck` ✓, `pnpm --filter @aqsha-ai/admin-web build` ✓
