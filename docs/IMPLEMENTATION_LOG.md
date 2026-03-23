@@ -415,3 +415,50 @@ VALUES ('noop', 'pending', now());
 **Dependencies added:** none
 
 **Verification:** `pnpm --filter @aqsha-ai/worker typecheck` ✓, `pnpm --filter @aqsha-ai/worker build` ✓
+
+---
+
+## 2026-03-23 — Docker / Render Production Packaging
+
+**Task:** Package both services for production deployment on Render via Docker.
+
+**Result:** Multi-stage Dockerfiles for both services, root `.dockerignore`, and a `render.yaml` Render Blueprint covering both services with full env var declarations.
+
+**Files affected:**
+- `apps/bot-api/Dockerfile` (new — builder: corepack + pnpm install + build + pnpm deploy; runner: Alpine + ffmpeg + prod bundle)
+- `apps/worker/Dockerfile` (new — same pattern, no ffmpeg, no EXPOSE)
+- `.dockerignore` (new — excludes node_modules, dist, .env files, .git, coverage, .supabase)
+- `render.yaml` (new — Blueprint with `type: web` for bot-api and `type: worker` for worker; all env vars listed; secrets use `sync: false`)
+
+**Key behavior:**
+- `pnpm deploy --filter <pkg>` produces a standalone prod bundle (no devDeps; workspace packages with built dist/ copied into node_modules)
+- App's own `dist/` copied separately with `cp -r` (not included by `pnpm deploy`)
+- `corepack enable` activates the pnpm version declared in root `package.json`
+- bot-api exposes port 3000 and declares `healthCheckPath: /health` in render.yaml
+- Worker has no exposed port (Render `type: worker` background service)
+- All env vars listed in render.yaml for both services; worker includes OPENAI_API_KEY and other unused vars because `parseEnv()` validates the full schema on startup
+
+**Verification:** Dockerfiles and render.yaml reviewed and accepted.
+
+---
+
+## 2026-03-23 — Deploy Readiness + Telegram Webhook Registration (apps/bot-api)
+
+**Task:** Add automatic Telegram webhook registration to bot-api startup and expose reusable webhook management helpers.
+
+**Result:** bot-api now registers its webhook with Telegram on every startup before accepting traffic. If registration fails, the process exits with code 1 so Render does not mark the deploy healthy.
+
+**Files affected:**
+- `apps/bot-api/src/telegram/webhook-registration.ts` (new — `setWebhook`, `deleteWebhook`; both throw on all failure modes)
+- `apps/bot-api/src/main.ts` (modified — calls `setWebhook` before `app.listen()` when `TELEGRAM_WEBHOOK_URL` is set)
+
+**Key behavior:**
+- `setWebhook`: registers URL + restricts to `['message', 'callback_query']` update types; passes `secret_token` when `TELEGRAM_WEBHOOK_SECRET` is configured; idempotent (safe on every restart)
+- `deleteWebhook`: removes webhook (for local dev / polling mode switch); not called during normal production startup
+- Registration skipped when `TELEGRAM_WEBHOOK_URL` is not set (local dev / polling mode) — warns in log
+- Registration failure: logs error and exits 1 — Render health check fails, preventing traffic to a bot that cannot receive updates
+- Unlike `telegram-client.ts` (swallows errors), these helpers throw — different contract for startup-time operations
+
+**Dependencies added:** none
+
+**Verification:** `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓

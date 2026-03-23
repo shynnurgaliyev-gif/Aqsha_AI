@@ -13,7 +13,7 @@
 
 ## Current Phase
 
-**Analytics / recommendations phase complete. Admin dashboard is next.**
+**Deploy pipeline underway. Admin dashboard not yet started.**
 
 The approved implementation order from CLAUDE.md:
 1. ~~Lock architecture~~ ✓
@@ -24,8 +24,8 @@ The approved implementation order from CLAUDE.md:
 6. ~~Telegram webhook / core flows~~ ✓
 7. ~~Voice pipeline~~ ✓
 8. ~~Analytics / recommendations~~ ✓ (analytics queries, job queue, recommendation generation, real Telegram delivery)
-9. → **Admin dashboard** ← current
-10. Deploy pipeline
+9. Admin dashboard — not yet started (skipped ahead)
+10. → **Deploy pipeline** ← current (Docker packaging ✓, webhook registration ✓, CI/CD pending)
 
 ---
 
@@ -50,6 +50,8 @@ The approved implementation order from CLAUDE.md:
 | Daily recommendation foundation | ✓ accepted | `daily-recommendations/`: repository (stats, idempotent insert, delivery enqueue), calculator (days remaining, safe daily spend), formatter, generate handler, deliver-stub handler; both handlers registered in job registry |
 | Real Telegram delivery from worker | ✓ accepted | `worker/src/telegram/sender.ts` (throwing sender); deliver handler; `markRecommendationSent`, `markRecommendationFailed`, `findUserForDelivery` in repository; job type `daily_recommendation_deliver` registered |
 | Daily recommendation scheduling foundation | ✓ accepted | `daily-recommendations/scheduler.ts`: single-SQL eligible user scan with dual dedup (daily_recommendations row + pending job); wired into worker tick before `processJobs` |
+| Docker / Render production packaging | ✓ accepted | multi-stage Dockerfiles for bot-api (with ffmpeg) and worker; `.dockerignore`; `render.yaml` blueprint with both services and all env vars |
+| Deploy readiness + Telegram webhook registration | ✓ accepted | `telegram/webhook-registration.ts` (`setWebhook`, `deleteWebhook`); bot-api now auto-registers webhook on startup when `TELEGRAM_WEBHOOK_URL` is set; aborts startup on registration failure |
 
 ---
 
@@ -57,19 +59,15 @@ The approved implementation order from CLAUDE.md:
 
 - Billing / subscription lifecycle logic
 - Admin dashboard (apps/admin-web)
-- Docker configuration
-- Render deployment pipeline
 - CI/CD GitHub Actions
 
 ---
 
 ## Next Recommended Step
 
-Implement Docker / Render production packaging foundation:
-- write `Dockerfile` for `apps/bot-api` (multi-stage, production-oriented)
-- write `Dockerfile` for `apps/worker`
-- add `render.yaml` or document Render service configuration for both services
-- confirm environment variable wiring for production secrets (no secrets in repo)
+Implement CI/CD GitHub Actions pipeline:
+- add `.github/workflows/` with a build + typecheck workflow triggered on push to `dev`
+- optionally add a deploy-on-merge-to-main workflow that triggers Render deploy hooks
 
 ---
 
