@@ -13,7 +13,7 @@
 
 ## Current Phase
 
-**Telegram webhook / core flows — in progress.**
+**Voice pipeline complete. Analytics / recommendations is next.**
 
 The approved implementation order from CLAUDE.md:
 1. ~~Lock architecture~~ ✓
@@ -21,9 +21,9 @@ The approved implementation order from CLAUDE.md:
 3. ~~Lock DB migration baseline~~ ✓
 4. ~~Prepare implementation rules~~ ✓
 5. ~~Start backend skeleton~~ ✓
-6. → **Telegram webhook / core flows** ← current
-7. Voice pipeline
-8. Analytics / recommendations
+6. ~~Telegram webhook / core flows~~ ✓
+7. ~~Voice pipeline~~ ✓
+8. → **Analytics / recommendations** ← current
 9. Admin dashboard
 10. Deploy pipeline
 
@@ -43,13 +43,13 @@ The approved implementation order from CLAUDE.md:
 | Telegram webhook foundation | ✓ accepted | `POST /telegram/webhook`, secret validation, dedup via `telegram_update_receipts`, placeholder dispatcher |
 | Telegram routing + user bootstrap | ✓ accepted | update router, user upsert, session ensure, trial subscription ensure |
 | Text transaction intake foundation | ✓ accepted | narrow parser, category resolver, draft/confirm flow via `user_sessions`, transaction insert on confirm |
+| Telegram outbound sending foundation | ✓ accepted | `telegram-client.ts`, fetch-based `sendMessage`, wired into text intake flow |
+| Voice intake pipeline | ✓ accepted | `file-fetcher.ts`, `audio-converter.ts`, `transcriber.ts`, `handler.ts`; size guard, ffmpeg stdin→stdout, Whisper, feeds transcript into `handleTextMessage` |
 
 ---
 
 ## Not Started
 
-- Telegram outbound message sending (bot replies to user in Telegram)
-- Voice transcription pipeline (ffmpeg + OpenAI Whisper)
 - Job queue processors (job_queue table)
 - Daily recommendations generation and delivery
 - Billing / subscription lifecycle logic
@@ -62,12 +62,12 @@ The approved implementation order from CLAUDE.md:
 
 ## Next Recommended Step
 
-Implement Telegram outbound message sending in `apps/bot-api`:
-- add a minimal Telegram Bot API client (HTTP call to `sendMessage`)
-- use `TELEGRAM_BOT_TOKEN` from env
-- integrate with `IntakeResult` — send the correct reply text to the user's chat
-- keep it simple: no keyboards yet, plain text replies only
-- this closes the text intake loop so the user actually receives bot replies
+Implement analytics query foundation in `apps/bot-api`:
+- `GET /balance` equivalent as a bot command: deterministic SQL sum of income - expenses for a user
+- spending by category: aggregate transactions grouped by category for current month
+- transaction history: recent N transactions for a user
+- all queries must be deterministic SQL — no LLM involvement (per ADR-005)
+- wire results into bot replies via existing `sendMessage`
 
 ---
 

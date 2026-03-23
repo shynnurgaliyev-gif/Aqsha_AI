@@ -223,3 +223,51 @@
 **Dependencies added:** none
 
 **Verification:** `pnpm --filter @aqsha-ai/config build` ✓, `pnpm --filter @aqsha-ai/shared build` ✓, `pnpm --filter @aqsha-ai/database build` ✓, `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓
+
+---
+
+## current baseline — Telegram Outbound Sending Foundation (apps/bot-api)
+
+**Task:** Implement outbound text message sending to Telegram users.
+
+**Result:** `telegram-client.ts` provides `sendMessage` using native fetch. Wired into `update-router.ts` so text intake results are delivered to the user's chat after every handled message.
+
+**Files affected:**
+- `apps/bot-api/src/telegram/telegram-client.ts` (new — `sendMessage`, three-layer error handling: network / HTTP / API errors)
+- `apps/bot-api/src/telegram/update-router.ts` (modified — calls `sendMessage` with `msg.chat.id` and `result.message` after text intake)
+
+**Key behavior:**
+- Uses `TELEGRAM_BOT_TOKEN` from env; token never appears in logs
+- All error paths log and return without throwing — outbound failures do not crash webhook handler
+- Every `IntakeResult` variant has `message: string`; no adapter switch needed at call site
+
+**Dependencies added:** none (native `fetch`, Node 22+)
+
+**Verification:** `pnpm --filter @aqsha-ai/config build` ✓, `pnpm --filter @aqsha-ai/shared build` ✓, `pnpm --filter @aqsha-ai/database build` ✓, `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓
+
+---
+
+## current baseline — Voice Intake Pipeline (apps/bot-api)
+
+**Task:** Implement voice message transcription and intake pipeline.
+
+**Result:** Voice messages are downloaded from Telegram, converted to MP3 via ffmpeg, transcribed with OpenAI Whisper, and fed into the existing `handleTextMessage` handler. The draft/confirm flow is reused without duplication.
+
+**Files affected:**
+- `apps/bot-api/src/telegram/voice-intake/file-fetcher.ts` (new — `getFilePath`, `downloadVoiceFile`)
+- `apps/bot-api/src/telegram/voice-intake/audio-converter.ts` (new — `convertToMp3`, ffmpeg stdin→stdout pipe, no temp files)
+- `apps/bot-api/src/telegram/voice-intake/transcriber.ts` (new — `transcribeAudio`, native fetch + FormData, Whisper API)
+- `apps/bot-api/src/telegram/voice-intake/handler.ts` (new — `handleVoiceMessage`, orchestrates pipeline)
+- `apps/bot-api/src/telegram/update-router.ts` (modified — `'voice'` case wired to `handleVoiceMessage` + `sendMessage`)
+
+**Key behavior:**
+- Size guard rejects files larger than `MAX_VOICE_FILE_SIZE_MB` before any API call
+- ffmpeg args: `-i pipe:0 -f mp3 -vn -ar 16000 -ac 1 pipe:1` (mono 16 kHz, no temp files)
+- Whisper called with `response_format=text` — returns plain string, no JSON parsing needed
+- Synthetic `TelegramMessage` constructed from transcript to pass into `handleTextMessage`
+- Ambiguous voice parse triggers confirmation flow via existing session draft mechanism
+- All pipeline stages return null on failure; each has its own user-facing error message
+
+**Dependencies added:** none (native `fetch`, `FormData`, `child_process` from Node stdlib)
+
+**Verification:** `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓

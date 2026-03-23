@@ -4,6 +4,8 @@ import type { DbPool } from '@aqsha-ai/database';
 import type { TelegramUpdate, TelegramUpdateType } from './types';
 import { bootstrapUser } from './user-bootstrap-service';
 import { handleTextMessage } from './text-intake/handler';
+import { handleVoiceMessage } from './voice-intake/handler';
+import { sendMessage } from './telegram-client';
 
 /**
  * Routes an incoming Telegram update to the appropriate handler stub.
@@ -32,17 +34,20 @@ export async function routeTelegramUpdate(
         const { userId } = await bootstrapUser(db, env, from);
         const result = await handleTextMessage(msg, userId, db, logger);
         logger.info({ updateId: update.update_id, resultKind: result.kind }, 'Text message handled');
+        await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: result.message }, logger);
       }
       break;
     }
 
     case 'voice': {
-      const from = update.message?.from;
-      if (from && !from.is_bot) {
-        await bootstrapUser(db, env, from);
+      const msg = update.message;
+      const from = msg?.from;
+      if (msg && from && !from.is_bot) {
+        const { userId } = await bootstrapUser(db, env, from);
+        const result = await handleVoiceMessage(msg, userId, db, env, logger);
+        logger.info({ updateId: update.update_id, resultKind: result.kind }, 'Voice message handled');
+        await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: result.message }, logger);
       }
-      logger.info({ updateId: update.update_id }, 'Voice message received — handler not yet implemented');
-      // TODO: await handleVoiceMessage(update, db, env, logger);
       break;
     }
 
