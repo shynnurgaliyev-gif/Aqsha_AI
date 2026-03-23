@@ -109,7 +109,7 @@
 
 **Note:** `paths: {}` in tsconfig overrides base path aliases. Bot-api resolves workspace packages through node_modules (built dist), not source. Packages must be built before typechecking the app.
 
-**Verification:** `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓
+**Verification:** `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓ (skeleton only)
 
 ---
 
@@ -163,4 +163,32 @@
 
 **Follow-up fix:** `db.json(data.payloadJson as any)` — postgres.js `JSONValue` internal type not satisfiable from user code; `as any` is the correct minimal cast.
 
-**Verification:** `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓
+**Verification:** `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓ (webhook foundation)
+
+---
+
+## current baseline — Telegram Update Routing + User Bootstrap (apps/bot-api)
+
+**Task:** Implement update routing foundation and user/session/subscription bootstrap.
+
+**Result:** Incoming updates are routed by type. On every user-originated update, the app upserts the user, ensures a session row, and ensures a trial subscription exists.
+
+**Files affected:**
+- `apps/bot-api/src/telegram/users-repository.ts` (new — `upsertUser`, ON CONFLICT DO UPDATE, COALESCE language_code)
+- `apps/bot-api/src/telegram/session-repository.ts` (new — `ensureUserSession`, ON CONFLICT DO NOTHING)
+- `apps/bot-api/src/telegram/subscription-repository.ts` (new — `ensureTrialSubscription`, ON CONFLICT DO NOTHING, make_interval)
+- `apps/bot-api/src/telegram/user-bootstrap-service.ts` (new — `bootstrapUser`, orchestrates the three repositories)
+- `apps/bot-api/src/telegram/update-router.ts` (new — `routeTelegramUpdate`, routes message/voice/callback_query/edited_message/unknown)
+- `apps/bot-api/src/telegram/update-handler.ts` (modified — added `env` param, delegates to router)
+- `apps/bot-api/src/telegram/webhook-route.ts` (modified — passes `env` to handler)
+- `packages/config/src/env.ts` (modified — `TELEGRAM_WEBHOOK_SECRET` made optional, restoring accepted contract)
+
+**Key behavior:**
+- Bot-originated updates skipped from bootstrap (`!from.is_bot`)
+- Unsupported update types logged and ignored without failure
+- All three bootstrap operations are idempotent
+- `trg_subscriptions_sync_user_plan` trigger keeps `users.current_plan_status` in sync automatically
+
+**Dependencies added:** none
+
+**Verification:** `pnpm --filter @aqsha-ai/config build` ✓, `pnpm --filter @aqsha-ai/database build` ✓, `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓

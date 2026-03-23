@@ -41,14 +41,13 @@ The approved implementation order from CLAUDE.md:
 | `apps/bot-api` skeleton | ✓ accepted | Fastify v5, `/health`, bootstrap, graceful shutdown |
 | `apps/worker` skeleton | ✓ accepted | pino, poll loop, tick guard, graceful shutdown |
 | Telegram webhook foundation | ✓ accepted | `POST /telegram/webhook`, secret validation, dedup via `telegram_update_receipts`, placeholder dispatcher |
+| Telegram routing + user bootstrap | ✓ accepted | update router, user upsert, session ensure, trial subscription ensure |
 
 ---
 
 ## Not Started
 
-- Telegram update routing (text, voice, callback_query handlers)
-- User bootstrap / upsert on first seen
-- User session management
+- Text transaction intake (parse user message, create transaction record)
 - Transaction parsing (text and voice)
 - Voice transcription pipeline (ffmpeg + OpenAI Whisper)
 - Job queue processors (job_queue table)
@@ -63,11 +62,12 @@ The approved implementation order from CLAUDE.md:
 
 ## Next Recommended Step
 
-Implement Telegram update routing and user bootstrap in `apps/bot-api`:
-- upsert user row in `users` table on first seen (by `telegram_user_id`)
-- route updates by type inside `handleTelegramUpdate` (message, voice, callback_query)
-- add stub handlers per update type
-- do not implement transaction parsing yet — routing and user upsert only
+Implement text transaction intake in `apps/bot-api`:
+- receive plain text message from a routed text handler
+- send message text to OpenAI for intent/amount/category parsing
+- if parse is clear: create transaction record in `transactions` table
+- if parse is ambiguous: ask user for confirmation (use `user_sessions` for state)
+- do not implement voice pipeline yet — text only
 
 ---
 
