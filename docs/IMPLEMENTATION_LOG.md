@@ -271,3 +271,31 @@
 **Dependencies added:** none (native `fetch`, `FormData`, `child_process` from Node stdlib)
 
 **Verification:** `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓
+
+---
+
+## current baseline — Analytics Query Foundation (apps/bot-api)
+
+**Task:** Implement deterministic analytics query layer for Telegram users.
+
+**Result:** Six analytics query types wired into the message routing path. The bot now answers a narrow set of finance questions using SQL queries with no LLM involvement. Analytics queries take priority over text intake in the message handler.
+
+**Files affected:**
+- `apps/bot-api/src/telegram/analytics/query-matcher.ts` (new — `matchAnalyticsQuery`, 13 exact-match tokens → 6 query types)
+- `apps/bot-api/src/telegram/analytics/analytics-repository.ts` (new — `queryBalance`, `queryMonthTotal`, `queryCategoryBreakdown`, `queryRecentTransactions`)
+- `apps/bot-api/src/telegram/analytics/formatter.ts` (new — plain-text formatters, amounts via `toLocaleString('ru-RU') + ' ₸'`)
+- `apps/bot-api/src/telegram/analytics/handler.ts` (new — `handleAnalyticsQuery`, returns `string | null`)
+- `apps/bot-api/src/telegram/update-router.ts` (modified — `'message'` case calls `handleAnalyticsQuery` before `handleTextMessage`; null return falls through)
+
+**Supported queries:** баланс / balance, расходы / расходы за месяц, доходы / доходы за месяц, категории расходов, категории доходов, последние операции / история
+
+**Key behavior:**
+- All queries filter `is_deleted = false AND parse_status = 'confirmed'`
+- Monthly scope uses `transaction_date_local` (user's local date, already filled by DB trigger)
+- SUM results are PostgreSQL `bigint`, converted with `Number()` before formatting
+- Handler returns error string (not throw) on DB failure — no webhook crash
+- Voice messages automatically reach analytics via the existing transcript → `handleTextMessage` path
+
+**Dependencies added:** none
+
+**Verification:** `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓

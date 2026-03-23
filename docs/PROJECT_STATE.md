@@ -13,7 +13,7 @@
 
 ## Current Phase
 
-**Voice pipeline complete. Analytics / recommendations is next.**
+**Analytics query foundation complete. Daily recommendations (job queue) is next.**
 
 The approved implementation order from CLAUDE.md:
 1. ~~Lock architecture~~ ✓
@@ -23,7 +23,7 @@ The approved implementation order from CLAUDE.md:
 5. ~~Start backend skeleton~~ ✓
 6. ~~Telegram webhook / core flows~~ ✓
 7. ~~Voice pipeline~~ ✓
-8. → **Analytics / recommendations** ← current
+8. → **Analytics / recommendations** ← current (analytics queries done; daily recommendations remaining)
 9. Admin dashboard
 10. Deploy pipeline
 
@@ -45,6 +45,7 @@ The approved implementation order from CLAUDE.md:
 | Text transaction intake foundation | ✓ accepted | narrow parser, category resolver, draft/confirm flow via `user_sessions`, transaction insert on confirm |
 | Telegram outbound sending foundation | ✓ accepted | `telegram-client.ts`, fetch-based `sendMessage`, wired into text intake flow |
 | Voice intake pipeline | ✓ accepted | `file-fetcher.ts`, `audio-converter.ts`, `transcriber.ts`, `handler.ts`; size guard, ffmpeg stdin→stdout, Whisper, feeds transcript into `handleTextMessage` |
+| Analytics query foundation | ✓ accepted | `telegram/analytics/`: query-matcher (13 tokens), analytics-repository (4 SQL queries), formatter, handler; balance, month totals, category breakdown, recent transactions; wired into update-router before text intake |
 
 ---
 
@@ -62,12 +63,13 @@ The approved implementation order from CLAUDE.md:
 
 ## Next Recommended Step
 
-Implement analytics query foundation in `apps/bot-api`:
-- `GET /balance` equivalent as a bot command: deterministic SQL sum of income - expenses for a user
-- spending by category: aggregate transactions grouped by category for current month
-- transaction history: recent N transactions for a user
-- all queries must be deterministic SQL — no LLM involvement (per ADR-005)
-- wire results into bot replies via existing `sendMessage`
+Implement job queue processor foundation in `apps/worker`:
+- poll `job_queue` table for pending jobs (`status='pending'`, `run_after <= now()`)
+- claim rows atomically with `UPDATE ... SET status='processing' WHERE id = ... RETURNING *` (or `SELECT ... FOR UPDATE SKIP LOCKED`)
+- dispatch by `job_type`
+- mark jobs `done` or `failed` with `last_error`
+- implement first job type stub: `daily_recommendation` (generation + delivery)
+- this is the prerequisite for the daily recommendations feature
 
 ---
 
