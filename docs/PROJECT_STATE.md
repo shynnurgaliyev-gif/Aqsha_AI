@@ -42,13 +42,13 @@ The approved implementation order from CLAUDE.md:
 | `apps/worker` skeleton | ✓ accepted | pino, poll loop, tick guard, graceful shutdown |
 | Telegram webhook foundation | ✓ accepted | `POST /telegram/webhook`, secret validation, dedup via `telegram_update_receipts`, placeholder dispatcher |
 | Telegram routing + user bootstrap | ✓ accepted | update router, user upsert, session ensure, trial subscription ensure |
+| Text transaction intake foundation | ✓ accepted | narrow parser, category resolver, draft/confirm flow via `user_sessions`, transaction insert on confirm |
 
 ---
 
 ## Not Started
 
-- Text transaction intake (parse user message, create transaction record)
-- Transaction parsing (text and voice)
+- Telegram outbound message sending (bot replies to user in Telegram)
 - Voice transcription pipeline (ffmpeg + OpenAI Whisper)
 - Job queue processors (job_queue table)
 - Daily recommendations generation and delivery
@@ -62,12 +62,12 @@ The approved implementation order from CLAUDE.md:
 
 ## Next Recommended Step
 
-Implement text transaction intake in `apps/bot-api`:
-- receive plain text message from a routed text handler
-- send message text to OpenAI for intent/amount/category parsing
-- if parse is clear: create transaction record in `transactions` table
-- if parse is ambiguous: ask user for confirmation (use `user_sessions` for state)
-- do not implement voice pipeline yet — text only
+Implement Telegram outbound message sending in `apps/bot-api`:
+- add a minimal Telegram Bot API client (HTTP call to `sendMessage`)
+- use `TELEGRAM_BOT_TOKEN` from env
+- integrate with `IntakeResult` — send the correct reply text to the user's chat
+- keep it simple: no keyboards yet, plain text replies only
+- this closes the text intake loop so the user actually receives bot replies
 
 ---
 

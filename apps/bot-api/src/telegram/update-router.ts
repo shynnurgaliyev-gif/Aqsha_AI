@@ -3,6 +3,7 @@ import type { AppEnv } from '@aqsha-ai/config';
 import type { DbPool } from '@aqsha-ai/database';
 import type { TelegramUpdate, TelegramUpdateType } from './types';
 import { bootstrapUser } from './user-bootstrap-service';
+import { handleTextMessage } from './text-intake/handler';
 
 /**
  * Routes an incoming Telegram update to the appropriate handler stub.
@@ -25,12 +26,13 @@ export async function routeTelegramUpdate(
 ): Promise<void> {
   switch (updateType) {
     case 'message': {
-      const from = update.message?.from;
-      if (from && !from.is_bot) {
-        await bootstrapUser(db, env, from);
+      const msg = update.message;
+      const from = msg?.from;
+      if (msg && from && !from.is_bot) {
+        const { userId } = await bootstrapUser(db, env, from);
+        const result = await handleTextMessage(msg, userId, db, logger);
+        logger.info({ updateId: update.update_id, resultKind: result.kind }, 'Text message handled');
       }
-      logger.info({ updateId: update.update_id }, 'Text message received — handler not yet implemented');
-      // TODO: await handleTextMessage(update, db, env, logger);
       break;
     }
 

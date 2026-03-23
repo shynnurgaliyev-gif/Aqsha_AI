@@ -192,3 +192,34 @@
 **Dependencies added:** none
 
 **Verification:** `pnpm --filter @aqsha-ai/config build` ✓, `pnpm --filter @aqsha-ai/database build` ✓, `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓
+
+---
+
+## current baseline — Text Transaction Intake Foundation (apps/bot-api)
+
+**Task:** Implement deterministic draft/confirmation flow for simple text transaction intake.
+
+**Result:** Text messages matching `<kind> <amount> <category>` create a pending draft in `user_sessions.context_json`. Explicit confirmation inserts the transaction; cancellation clears the draft. Unrecognised input returns a safe fallback boundary.
+
+**Files affected:**
+- `apps/bot-api/src/telegram/text-intake/parser.ts` (new — narrow format parser, integer-only amount guard)
+- `apps/bot-api/src/telegram/text-intake/category-resolver.ts` (new — user category first, system fallback, matched by `normalized_name`)
+- `apps/bot-api/src/telegram/text-intake/session-draft.ts` (new — `getPendingDraft`, `setPendingDraft`, `clearPendingDraft` via JSONB `||` and `-` operators)
+- `apps/bot-api/src/telegram/text-intake/transaction-inserter.ts` (new — `insertConfirmedTransaction`, `source_type='text'`, `parse_status='confirmed'`)
+- `apps/bot-api/src/telegram/text-intake/response.ts` (new — `IntakeResult` discriminated union)
+- `apps/bot-api/src/telegram/text-intake/handler.ts` (new — `handleTextMessage`, orchestrates all of the above)
+- `apps/bot-api/src/telegram/update-router.ts` (modified — `'message'` case now calls `handleTextMessage`, captures `userId` from bootstrap result)
+
+**Key behavior:**
+- Supported kind tokens: расход/доход/expense/income + aliases
+- Amount must be a pure positive integer (regex `^\d+$`)
+- Category resolved by `normalized_name`; user category preferred over system
+- Draft stored under `context_json.pendingTransaction`; session_status set to `awaiting_confirmation`
+- On confirm: transaction inserted, draft cleared, session_status reset to `idle`
+- On cancel: draft cleared, nothing inserted
+- On unknown text with active draft: treated as new intake attempt (draft replaced if valid)
+- DB trigger fills `transaction_date_local` automatically from user timezone
+
+**Dependencies added:** none
+
+**Verification:** `pnpm --filter @aqsha-ai/config build` ✓, `pnpm --filter @aqsha-ai/shared build` ✓, `pnpm --filter @aqsha-ai/database build` ✓, `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓
