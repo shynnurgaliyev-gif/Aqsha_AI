@@ -22,7 +22,7 @@ const envSchema = z.object({
 
   // ── Telegram ─────────────────────────────────────────────────────────────
   TELEGRAM_BOT_TOKEN: z.string().min(1),
-  TELEGRAM_WEBHOOK_SECRET: z.string().min(1),
+  TELEGRAM_WEBHOOK_SECRET: z.string().min(1).optional(),
   TELEGRAM_WEBHOOK_URL: z.string().url().optional(),
 
   // ── Database ─────────────────────────────────────────────────────────────

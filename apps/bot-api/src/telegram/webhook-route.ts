@@ -75,7 +75,7 @@ export function createWebhookRoute(env: AppEnv, db: DbPool): FastifyPluginAsync 
 
       // ── 5. Dispatch ──────────────────────────────────────────────────────────
       try {
-        await handleTelegramUpdate(update, updateType, db, app.log);
+        await handleTelegramUpdate(update, updateType, db, env, app.log);
         await markReceiptProcessed(db, update.update_id);
       } catch (err) {
         app.log.error({ err, updateId: update.update_id }, 'Unhandled error processing Telegram update');
