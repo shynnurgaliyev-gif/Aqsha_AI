@@ -299,3 +299,39 @@
 **Dependencies added:** none
 
 **Verification:** `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓
+
+---
+
+## current baseline — Worker Job Queue Foundation (apps/worker)
+
+**Task:** Implement job queue claiming and processing foundation in the worker service.
+
+**Result:** The worker now claims and processes jobs from `public.job_queue` on every poll tick. Job state transitions are explicit. Unknown job types are safely handled. A `noop` handler validates the full pipeline end-to-end.
+
+**Files affected:**
+- `apps/worker/src/job-queue/types.ts` (new — `JobRow`, `JobHandler`, `JobContext`)
+- `apps/worker/src/job-queue/repository.ts` (new — `claimNextJob`, `markJobDone`, `markJobFailed`)
+- `apps/worker/src/job-queue/registry.ts` (new — handler map, `getHandler`)
+- `apps/worker/src/job-queue/processor.ts` (new — `processJobs`, claims up to `JOB_BATCH_SIZE` per tick)
+- `apps/worker/src/job-queue/handlers/noop.ts` (new — `noopHandler` for `'noop'` job type)
+- `apps/worker/src/app.ts` (modified — removed `_db` stub, wired `processJobs(db, env, logger)` into tick)
+
+**Key behavior:**
+- Claiming: `UPDATE ... WHERE id = (SELECT ... FOR UPDATE SKIP LOCKED)` — single atomic statement, safe for concurrent workers
+- Claim increments `attempts`, sets `status='processing'`, sets `locked_at` and `locked_by`
+- Unknown job type → `status='failed'`, `last_error` = "Unknown job type: <type>"
+- Handler throws → `status='failed'`, `last_error` = error message
+- Handler returns → `status='done'`
+- `attempts >= max_attempts` → job is never claimed again (filter in claim query)
+- `set_updated_at` trigger updates `updated_at` automatically on all status changes
+- One job failure does not abort processing of subsequent jobs in the same tick
+
+**Manual test path:** Insert a `noop` job via SQL, observe worker log output showing "noop job executed" and "Job done":
+```sql
+INSERT INTO public.job_queue (job_type, status, run_after)
+VALUES ('noop', 'pending', now());
+```
+
+**Dependencies added:** none (pino already in worker deps)
+
+**Verification:** `pnpm --filter @aqsha-ai/worker typecheck` ✓, `pnpm --filter @aqsha-ai/worker build` ✓

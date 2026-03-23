@@ -1,6 +1,7 @@
 import pino from 'pino';
 import type { AppEnv } from '@aqsha-ai/config';
 import type { DbPool } from '@aqsha-ai/database';
+import { processJobs } from './job-queue/processor';
 
 export interface WorkerInstance {
   start(): void;
@@ -14,9 +15,9 @@ export interface WorkerInstance {
  * Concurrent ticks are prevented — if a tick is still running when
  * the next interval fires, the new tick is skipped and a warning is logged.
  *
- * Job processors will be called from inside tick() in future tasks.
+ * Each tick claims and processes up to JOB_BATCH_SIZE jobs from public.job_queue.
  */
-export function createWorker(env: AppEnv, _db: DbPool): WorkerInstance {
+export function createWorker(env: AppEnv, db: DbPool): WorkerInstance {
   const logger = pino({ level: env.LOG_LEVEL, name: env.APP_NAME });
 
   let timer: ReturnType<typeof setInterval> | null = null;
@@ -31,7 +32,7 @@ export function createWorker(env: AppEnv, _db: DbPool): WorkerInstance {
     tickInProgress = true;
     try {
       logger.debug('Worker tick');
-      // Job processors will be invoked here in future tasks.
+      await processJobs(db, env, logger);
     } catch (err) {
       logger.error({ err }, 'Unhandled error in worker tick');
     } finally {
