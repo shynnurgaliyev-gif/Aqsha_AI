@@ -3,6 +3,9 @@
 > Factual record of completed and accepted implementation work.
 > Do not add entries for work that has not been verified and accepted.
 > Keep entries short. One entry per completed task.
+>
+> Archiving: when this file becomes too large, older entries are moved to
+> docs/archive/IMPLEMENTATION_LOG_archive_NNN.md. Do not delete history.
 
 ---
 
@@ -358,6 +361,56 @@ VALUES ('noop', 'pending', now());
 - Safe daily spend: `Math.floor(balance / daysRemaining)`, clamped to 0 if balance ≤ 0, daysRemaining clamped to min 1
 - Deliver-stub handler: loads recommendation, guards on non-pending status, marks `delivery_status='skipped'` with reason `'delivery_not_implemented'`; real delivery replaces this stub
 - `db.json(payload as any)` pattern used for JSONB insertion (established project pattern)
+
+**Dependencies added:** none
+
+**Verification:** `pnpm --filter @aqsha-ai/worker typecheck` ✓, `pnpm --filter @aqsha-ai/worker build` ✓
+
+---
+
+## 2026-03-23 — Real Telegram Delivery from Worker (apps/worker)
+
+**Task:** Replace delivery stub with real Telegram message delivery from the worker service.
+
+**Result:** Worker now sends daily recommendation messages directly to users via the Telegram Bot API. Delivery state is tracked deterministically in `daily_recommendations`.
+
+**Files affected:**
+- `apps/worker/src/telegram/sender.ts` (new — `sendTelegramMessage`, throws on all failure modes to enable job-level retry)
+- `apps/worker/src/daily-recommendations/repository.ts` (modified — added `DeliveryUserRecord`, `findUserForDelivery`, `markRecommendationSent`, `markRecommendationFailed`; updated `enqueueDeliveryJob` to use job type `daily_recommendation_deliver`)
+- `apps/worker/src/daily-recommendations/handlers/deliver.ts` (new — `dailyRecommendationDeliverHandler` for job type `daily_recommendation_deliver`)
+- `apps/worker/src/job-queue/registry.ts` (modified — registered `daily_recommendation_deliver` handler; `deliver-stub` kept for backward compat)
+
+**Key behavior:**
+- Delivery target: `users.telegram_user_id` is used as Telegram `chat_id` (correct for private bot chats)
+- Idempotency: `sent` and `skipped` statuses skip delivery; `pending` and `failed` both proceed (failed enables retry)
+- User inactive at delivery time → mark recommendation `skipped`, job done
+- Telegram failure → mark recommendation `failed`, re-throw so job processor marks job failed and retries
+- Success → `delivery_status='sent'`, `delivered_at=now()`, `error_text=null`
+- `deliver-stub` job type remains registered for any previously queued stub jobs
+
+**Dependencies added:** none (native `fetch`, Node 22+)
+
+**Verification:** `pnpm --filter @aqsha-ai/worker typecheck` ✓, `pnpm --filter @aqsha-ai/worker build` ✓
+
+---
+
+## 2026-03-23 — Daily Recommendation Scheduling Foundation (apps/worker)
+
+**Task:** Implement the scheduling layer that automatically enqueues daily recommendation generation jobs for eligible users at their configured local hour.
+
+**Result:** Worker now scans eligible users on every tick and enqueues `daily_recommendation_generate` jobs automatically. The full recommendation pipeline (schedule → generate → deliver) is operational end-to-end.
+
+**Files affected:**
+- `apps/worker/src/daily-recommendations/scheduler.ts` (new — `findUsersNeedingGenerationJob`, `enqueueGenerationJob`, `runDailyRecommendationScheduler`)
+- `apps/worker/src/app.ts` (modified — `runDailyRecommendationScheduler` called before `processJobs` in tick)
+
+**Key behavior:**
+- Single SQL pass over `users` with all eligibility and dedup conditions in `WHERE`
+- Eligibility: `is_active = true`, `daily_recommendations_enabled = true`, `timezone <> ''`, current local hour `>=` `daily_recommendations_hour`
+- Dedup guard 1: no `daily_recommendations` row for today's local date (uses per-user timezone via `AT TIME ZONE`)
+- Dedup guard 2: no `daily_recommendation_generate` job in `pending`/`processing` state created since UTC midnight today
+- Per-user enqueue failures are caught and logged; one failure does not abort the scheduler pass
+- Scheduler query failure is caught at the top level and logged; job processing tick still runs
 
 **Dependencies added:** none
 

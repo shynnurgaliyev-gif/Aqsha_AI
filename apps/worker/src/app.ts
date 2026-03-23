@@ -2,6 +2,7 @@ import pino from 'pino';
 import type { AppEnv } from '@aqsha-ai/config';
 import type { DbPool } from '@aqsha-ai/database';
 import { processJobs } from './job-queue/processor';
+import { runDailyRecommendationScheduler } from './daily-recommendations/scheduler';
 
 export interface WorkerInstance {
   start(): void;
@@ -32,6 +33,7 @@ export function createWorker(env: AppEnv, db: DbPool): WorkerInstance {
     tickInProgress = true;
     try {
       logger.debug('Worker tick');
+      await runDailyRecommendationScheduler(db, logger);
       await processJobs(db, env, logger);
     } catch (err) {
       logger.error({ err }, 'Unhandled error in worker tick');

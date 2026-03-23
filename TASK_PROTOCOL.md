@@ -148,3 +148,23 @@ Protect consistency.
 
 Stay within the approved system.
 
+
+
+\## 10. PROJECT\_STATE freshness rule
+
+After every accepted task, docs/PROJECT\_STATE.md must be updated.
+
+"Next Recommended Step" must always reflect the actual next approved implementation step — not a stale or speculative one.
+
+Do not leave "Next Recommended Step" pointing to work that was already completed.
+
+
+
+\## 11. IMPLEMENTATION\_LOG archiving rule
+
+When docs/IMPLEMENTATION\_LOG.md becomes too large to read comfortably, older accepted entries must be moved to docs/archive/IMPLEMENTATION\_LOG\_archive\_NNN.md.
+
+Do not delete project history — archive it.
+
+Do not archive entries that have not been accepted and verified.
+
