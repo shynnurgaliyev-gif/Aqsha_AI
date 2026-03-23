@@ -5,6 +5,7 @@ import type { TelegramUpdate, TelegramUpdateType } from './types';
 import { bootstrapUser } from './user-bootstrap-service';
 import { handleTextMessage } from './text-intake/handler';
 import { handleVoiceMessage } from './voice-intake/handler';
+import { handleAnalyticsQuery } from './analytics/handler';
 import { sendMessage } from './telegram-client';
 
 /**
@@ -32,9 +33,19 @@ export async function routeTelegramUpdate(
       const from = msg?.from;
       if (msg && from && !from.is_bot) {
         const { userId } = await bootstrapUser(db, env, from);
-        const result = await handleTextMessage(msg, userId, db, logger);
-        logger.info({ updateId: update.update_id, resultKind: result.kind }, 'Text message handled');
-        await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: result.message }, logger);
+
+        // Analytics queries take priority over text intake.
+        // handleAnalyticsQuery returns null if the text is not a recognised query.
+        const analyticsResponse = await handleAnalyticsQuery(msg.text ?? '', userId, db, logger);
+
+        if (analyticsResponse !== null) {
+          logger.info({ updateId: update.update_id }, 'Analytics query handled');
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: analyticsResponse }, logger);
+        } else {
+          const result = await handleTextMessage(msg, userId, db, logger);
+          logger.info({ updateId: update.update_id, resultKind: result.kind }, 'Text message handled');
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: result.message }, logger);
+        }
       }
       break;
     }
