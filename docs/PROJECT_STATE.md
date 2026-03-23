@@ -13,7 +13,7 @@
 
 ## Current Phase
 
-**Analytics queries and job queue foundation complete. Daily recommendations handler is next.**
+**Daily recommendation generation and delivery stub complete. Real Telegram delivery from worker is next.**
 
 The approved implementation order from CLAUDE.md:
 1. ~~Lock architecture~~ ✓
@@ -23,7 +23,7 @@ The approved implementation order from CLAUDE.md:
 5. ~~Start backend skeleton~~ ✓
 6. ~~Telegram webhook / core flows~~ ✓
 7. ~~Voice pipeline~~ ✓
-8. → **Analytics / recommendations** ← current (analytics queries done; job queue done; daily recommendations handler remaining)
+8. → **Analytics / recommendations** ← current (analytics queries done; job queue done; daily recommendations generation + delivery stub done; real delivery remaining)
 9. Admin dashboard
 10. Deploy pipeline
 
@@ -47,12 +47,13 @@ The approved implementation order from CLAUDE.md:
 | Voice intake pipeline | ✓ accepted | `file-fetcher.ts`, `audio-converter.ts`, `transcriber.ts`, `handler.ts`; size guard, ffmpeg stdin→stdout, Whisper, feeds transcript into `handleTextMessage` |
 | Analytics query foundation | ✓ accepted | `telegram/analytics/`: query-matcher (13 tokens), analytics-repository (4 SQL queries), formatter, handler; balance, month totals, category breakdown, recent transactions; wired into update-router before text intake |
 | Worker job queue foundation | ✓ accepted | `job-queue/`: types, repository (claim/done/failed), registry, processor, noop handler; `FOR UPDATE SKIP LOCKED` claiming; wired into worker tick |
+| Daily recommendation foundation | ✓ accepted | `daily-recommendations/`: repository (stats, idempotent insert, delivery enqueue), calculator (days remaining, safe daily spend), formatter, generate handler, deliver-stub handler; both handlers registered in job registry |
 
 ---
 
 ## Not Started
 
-- Daily recommendations generation and delivery (job type: daily_recommendation)
+- Daily recommendation real Telegram delivery from worker (replace deliver-stub with actual sendMessage call)
 - Billing / subscription lifecycle logic
 - Admin dashboard (apps/admin-web)
 - Docker configuration
@@ -63,12 +64,11 @@ The approved implementation order from CLAUDE.md:
 
 ## Next Recommended Step
 
-Implement daily recommendation job handler in `apps/worker`:
-- add `daily_recommendation` handler to the job registry
-- query user's recent spending to build a short recommendation text (deterministic SQL, per ADR-005)
-- call Telegram Bot API to deliver the recommendation message to the user
-- insert/update row in `daily_recommendations` table with delivery status
-- enqueue jobs from bot-api or worker on the appropriate schedule
+Implement real Telegram delivery in `apps/worker`:
+- replace `daily_recommendation_deliver_stub` handler with real delivery logic
+- call Telegram Bot API `sendMessage` directly from worker using the stored `message_text`
+- update `delivery_status` to `sent` on success, `failed` on error
+- store `delivered_at` timestamp on success
 
 ---
 

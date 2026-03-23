@@ -335,3 +335,30 @@ VALUES ('noop', 'pending', now());
 **Dependencies added:** none (pino already in worker deps)
 
 **Verification:** `pnpm --filter @aqsha-ai/worker typecheck` ✓, `pnpm --filter @aqsha-ai/worker build` ✓
+
+---
+
+## 2026-03-23 — Daily Recommendation Foundation (apps/worker)
+
+**Task:** Implement daily recommendation generation and delivery stub job handlers in the worker service.
+
+**Result:** Worker can generate deterministic daily recommendations from SQL and enqueue delivery stub jobs. The full generate-then-deliver pipeline is wired through the job registry.
+
+**Files affected:**
+- `apps/worker/src/daily-recommendations/repository.ts` (new — `findUser`, `calculateDailyStats`, `insertRecommendationIfNew`, `findRecommendation`, `markRecommendationSkipped`, `enqueueDeliveryJob`)
+- `apps/worker/src/daily-recommendations/calculator.ts` (new — `calculateDaysRemaining`, `calculateSafeDailySpend`)
+- `apps/worker/src/daily-recommendations/formatter.ts` (new — `formatRecommendationMessage`, plain-text 5-line format)
+- `apps/worker/src/daily-recommendations/handlers/generate.ts` (new — `dailyRecommendationGenerateHandler` for job type `daily_recommendation_generate`)
+- `apps/worker/src/daily-recommendations/handlers/deliver-stub.ts` (new — `dailyRecommendationDeliverStubHandler` for job type `daily_recommendation_deliver_stub`)
+- `apps/worker/src/job-queue/registry.ts` (modified — both handlers registered)
+
+**Key behavior:**
+- Generate handler: validates user (active, recommendations enabled, plan not expired/blocked) → calculates stats via two SQL queries → formats message → `ON CONFLICT DO NOTHING RETURNING id` insert → enqueues deliver-stub job only on first insert (idempotent)
+- Stats: balance = all-time income minus expense; month totals scoped by `transaction_date_local` in user's timezone
+- Safe daily spend: `Math.floor(balance / daysRemaining)`, clamped to 0 if balance ≤ 0, daysRemaining clamped to min 1
+- Deliver-stub handler: loads recommendation, guards on non-pending status, marks `delivery_status='skipped'` with reason `'delivery_not_implemented'`; real delivery replaces this stub
+- `db.json(payload as any)` pattern used for JSONB insertion (established project pattern)
+
+**Dependencies added:** none
+
+**Verification:** `pnpm --filter @aqsha-ai/worker typecheck` ✓, `pnpm --filter @aqsha-ai/worker build` ✓
