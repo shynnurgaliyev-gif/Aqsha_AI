@@ -76,6 +76,61 @@ export async function softDeleteTransaction(
 }
 
 /**
+ * Updates the amount of a confirmed non-deleted transaction.
+ * Sets parse_status = 'corrected'.
+ *
+ * Returns true if a row was updated, false if the transaction was not found
+ * (already deleted, wrong user, or wrong status).
+ */
+export async function updateTransactionAmount(
+  db: DbPool,
+  transactionId: string,
+  userId: string,
+  newAmount: number,
+): Promise<boolean> {
+  const result = await db<{ id: string }[]>`
+    UPDATE public.transactions
+       SET amount       = ${newAmount},
+           parse_status = 'corrected'
+     WHERE id         = ${transactionId}
+       AND user_id    = ${userId}
+       AND is_deleted = false
+       AND parse_status = 'confirmed'
+    RETURNING id
+  `;
+  return result.length > 0;
+}
+
+/**
+ * Updates the category of a confirmed non-deleted transaction.
+ * Sets parse_status = 'corrected'.
+ *
+ * The DB trigger validates that the new category kind matches the transaction
+ * kind and that the category is accessible to this user.
+ *
+ * Returns true if a row was updated, false if the transaction was not found
+ * (already deleted, wrong user, or wrong status).
+ */
+export async function updateTransactionCategory(
+  db: DbPool,
+  transactionId: string,
+  userId: string,
+  newCategoryId: string,
+): Promise<boolean> {
+  const result = await db<{ id: string }[]>`
+    UPDATE public.transactions
+       SET category_id  = ${newCategoryId},
+           parse_status = 'corrected'
+     WHERE id         = ${transactionId}
+       AND user_id    = ${userId}
+       AND is_deleted = false
+       AND parse_status = 'confirmed'
+    RETURNING id
+  `;
+  return result.length > 0;
+}
+
+/**
  * Returns the 5 most recent confirmed non-deleted transactions for the user.
  * Used in the correction context to show actionable entries.
  */

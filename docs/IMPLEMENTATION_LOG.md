@@ -689,7 +689,7 @@ interface AdminEvent {
 - `setPendingDelete` removes `pendingTransaction` from context_json to prevent да/нет ambiguity
 - Both pending states use `session_status = 'awaiting_confirmation'` (within schema CHECK constraint)
 - While pendingDelete is active, all input is intercepted: да/нет handled, anything else returns reminder
-- Soft delete: `UPDATE transactions SET is_deleted = true, deleted_at = now() WHERE id = $id AND user_id = $userId AND is_deleted = false AND parse_status = 'confirmed'`
+- Soft delete: `UPDATE transactions SET is_deleted = true, deleted_at = now(), parse_status = 'deleted' WHERE id = $id AND user_id = $userId AND is_deleted = false AND parse_status = 'confirmed'`
 - Returns false (and `DELETE_FAILED` message) if row not found / already deleted
 - "show_recent" tokens deliberately exclude analytics tokens to avoid routing ambiguity
 
@@ -698,6 +698,23 @@ interface AdminEvent {
 - delete_last: "удалить последнюю", "удалить последнюю операцию", "удалить последнее", "delete last", "delete last transaction"
 - confirm: "да", "yes", "подтвердить", "confirm", "ok", "ок", "+"
 - cancel: "нет", "no", "отмена", "cancel", "отменить", "-"
+
+**Dependencies added:** none
+
+**Verification:** `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓
+
+---
+
+## 2026-03-24 — Soft-Delete parse_status Alignment (apps/bot-api)
+
+**Task:** Align soft-delete semantics so deleted transactions are unambiguous in the DB.
+
+**Result:** `softDeleteTransaction` now sets all three fields atomically. Post-delete row state: `is_deleted = true`, `deleted_at = <timestamp>`, `parse_status = 'deleted'`. Analytics and correction queries that filter `AND parse_status = 'confirmed'` correctly exclude deleted rows even if the `is_deleted` guard were ever missed.
+
+**Files affected:**
+- `apps/bot-api/src/telegram/transaction-correction/correction-repository.ts` (modified — `softDeleteTransaction` SET clause extended with `parse_status = 'deleted'`)
+
+**Reason:** The `transactions.parse_status` CHECK constraint explicitly includes `'deleted'` as a valid value. Leaving it as `'confirmed'` after soft-delete left an ambiguous row state inconsistent with schema intent.
 
 **Dependencies added:** none
 

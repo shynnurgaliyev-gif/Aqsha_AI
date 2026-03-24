@@ -45,7 +45,7 @@ export async function setPendingDelete(
 ): Promise<void> {
   await db`
     UPDATE user_sessions
-       SET context_json         = (context_json - 'pendingTransaction') || ${db.json({ pendingDelete: state } as any)},
+       SET context_json         = (context_json - 'pendingTransaction' - 'pendingCorrection') || ${db.json({ pendingDelete: state } as any)},
            session_status       = 'awaiting_confirmation',
            last_user_message_at = now()
      WHERE user_id = ${userId}
