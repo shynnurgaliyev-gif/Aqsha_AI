@@ -214,6 +214,67 @@ export async function markRecommendationSkipped(
   `;
 }
 
+export interface BudgetStatusRow {
+  categoryId: string;
+  categoryName: string;
+  budgetAmount: number;
+  spent: number;
+  remaining: number;
+  yearMonth: string;
+}
+
+/**
+ * Loads current-month budget statuses for a user, with spending aggregated
+ * from confirmed + corrected expense transactions.
+ * Returns an empty array when no budgets are set for the current month.
+ */
+export async function loadUserBudgetStatuses(
+  db: DbPool,
+  userId: string,
+  timezone: string,
+): Promise<BudgetStatusRow[]> {
+  const rows = await db<{
+    category_id: string;
+    category_name: string;
+    budget_amount: string;
+    spent: string;
+    year_month: string;
+  }[]>`
+    SELECT
+      mb.category_id::text,
+      c.name AS category_name,
+      mb.amount AS budget_amount,
+      COALESCE(SUM(t.amount), 0) AS spent,
+      mb.year_month
+    FROM public.monthly_budgets mb
+    JOIN public.categories c ON c.id = mb.category_id
+    LEFT JOIN public.transactions t
+      ON  t.user_id        = mb.user_id
+      AND t.category_id    = mb.category_id
+      AND t.kind           = 'expense'
+      AND t.is_deleted     = false
+      AND t.parse_status   IN ('confirmed', 'corrected')
+      AND to_char(t.transaction_date_local, 'YYYY-MM') = mb.year_month
+    WHERE mb.user_id   = ${userId}::uuid
+      AND mb.year_month = to_char((now() AT TIME ZONE ${timezone})::date, 'YYYY-MM')
+    GROUP BY mb.category_id, c.name, mb.amount, mb.year_month
+    ORDER BY c.name
+  `;
+
+  return rows.map((r) => {
+    const budgetAmount = Number(r.budget_amount);
+    const spent = Number(r.spent);
+    return {
+      categoryId: r.category_id,
+      categoryName: r.category_name,
+      budgetAmount,
+      spent,
+      remaining: budgetAmount - spent,
+      yearMonth: r.year_month,
+    };
+  });
+}
+
 /**
  * Enqueues a daily_recommendation_deliver job for the given recommendation.
  * Called immediately after a new recommendation row is created.

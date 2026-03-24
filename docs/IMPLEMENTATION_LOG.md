@@ -755,3 +755,59 @@ interface AdminEvent {
 **Dependencies added:** none
 
 **Verification:** `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓
+
+---
+
+## 2026-03-24 — Monthly Budget / Category Limit Foundation (apps/bot-api)
+
+**Task:** Add monthly category budget support: set, inspect, and list monthly expense budgets per category.
+
+**Result:** Users can set a budget for any expense category ("лимит еда 50000"), view current-month spending vs budget ("лимит еда"), and list all budgets for the month ("бюджеты"). Budgets are stored in a new `monthly_budgets` table; spending is calculated from confirmed/corrected expense transactions in the current calendar month. No confirmation flow — budget is a configuration value, not financial truth.
+
+**Files affected:**
+- `supabase/migrations/20260324_002_add_monthly_budgets.sql` (new — `monthly_budgets` table, unique constraint `(user_id, category_id, year_month)`, `set_updated_at` trigger, `validate_monthly_budget_category` trigger enforcing expense-only)
+- `apps/bot-api/src/telegram/budgets/budget-command-matcher.ts` (new — `matchBudgetCommand`, 4 list tokens, 3 set + 3 show regex patterns, typed union result)
+- `apps/bot-api/src/telegram/budgets/budget-repository.ts` (new — `upsertMonthlyBudget`, `getBudgetStatus`, `getAllBudgetStatuses`)
+- `apps/bot-api/src/telegram/budgets/budget-formatter.ts` (new — `formatBudgetSet`, `formatBudgetStatus`, `formatAllBudgetStatuses`, 2 error constants)
+- `apps/bot-api/src/telegram/budgets/budget-handler.ts` (new — `handleBudgetCommand`, returns `string | null`)
+- `apps/bot-api/src/telegram/update-router.ts` (modified — `handleBudgetCommand` wired between analytics and correction in message case)
+
+**Supported commands:**
+- set_budget: "лимит еда 50000" / "бюджет еда 50000" / "set budget food 50000"
+- show_budget: "лимит еда" / "бюджет еда" / "budget food"
+- list_budgets: "мои лимиты" / "бюджеты" / "my budgets" / "budgets"
+
+**Key behavior:**
+- Month key: `to_char(current_date, 'YYYY-MM')` — consistent with analytics' use of `current_date` for `transaction_date_local` scoping
+- Spending filter: `parse_status IN ('confirmed', 'corrected')` — corrected transactions count as real spending
+- Category resolution reuses `resolveCategory` with `kind = 'expense'`; income categories rejected at application layer; DB trigger is safety net
+- Budget upsert: `ON CONFLICT (user_id, category_id, year_month) DO UPDATE SET amount = ...` — idempotent, no confirmation needed
+- Over-budget state shown explicitly ("Перерасход: -X ₸")
+
+**Dependencies added:** none
+
+**Verification:** `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓
+
+---
+
+## Budget-aware daily recommendation expansion (apps/worker)
+
+**Task:** Extend the worker's daily recommendation generator to load current-month budget data, classify categories by spend signal, append budget warnings to the message, and store signals in `payload_json`.
+
+**Files affected:**
+- `apps/worker/src/daily-recommendations/repository.ts` (modified — added `BudgetStatusRow` interface and `loadUserBudgetStatuses`: joins `monthly_budgets` with categories and transactions; spending filtered to `kind='expense'`, `parse_status IN ('confirmed','corrected')`, current month via user timezone)
+- `apps/worker/src/daily-recommendations/calculator.ts` (modified — added `BudgetSignalKind`, `BudgetSignal`, `selectBudgetSignals`: classifies each budget as `on_track` / `near_limit` (≥80%) / `over_budget` (remaining < 0))
+- `apps/worker/src/daily-recommendations/formatter.ts` (modified — `RecommendationParams` gains optional `budgetSignals`; `formatRecommendationMessage` appends "Лимиты:" section with near-limit and over-budget lines; imports `BudgetSignal` from calculator)
+- `apps/worker/src/daily-recommendations/handlers/generate.ts` (modified — calls `loadUserBudgetStatuses` + `selectBudgetSignals` after stats; passes `budgetSignals` to formatter; stores classified budgets in `payload_json.budgets`)
+
+**Key behavior:**
+- Budget load scoped to `year_month = to_char((now() AT TIME ZONE <tz>)::date, 'YYYY-MM')` — consistent with bot-api budget-repository
+- Spending join guards: `t.kind='expense'`, `t.is_deleted=false`, `parse_status IN ('confirmed','corrected')`
+- Signal threshold: 80% spent → `near_limit`; `remaining < 0` → `over_budget`
+- Message appends budget section only when at least one near-limit or over-budget category exists
+- `payload_json.budgets` stores all classified categories (on_track included) for observability
+- No new DB tables; no new files
+
+**Dependencies added:** none
+
+**Verification:** `pnpm --filter @aqsha-ai/worker exec tsc --noEmit` ✓, `pnpm --filter @aqsha-ai/worker build` ✓

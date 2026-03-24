@@ -13,7 +13,7 @@
 
 ## Current Phase
 
-**Transaction correction expanded (amount + category). Real billing integration and admin work remain.**
+**Budget-aware daily recommendations done. Real billing integration and admin work remain.**
 
 The approved implementation order from CLAUDE.md:
 1. ~~Lock architecture~~ ✓
@@ -61,6 +61,8 @@ The approved implementation order from CLAUDE.md:
 | Transaction correction foundation | ✓ accepted | `telegram/transaction-correction/`: matcher, repository, session, formatter, handler; show-recent + delete-last commands; pending-delete state in `context_json['pendingDelete']`; soft-delete via `is_deleted`/`deleted_at`/`parse_status='deleted'`; mutual exclusion with pendingTransaction; typecheck ✓, build ✓ |
 | Soft-delete parse_status alignment | ✓ accepted | `softDeleteTransaction` now also sets `parse_status = 'deleted'`; post-delete state: `is_deleted=true`, `deleted_at=<ts>`, `parse_status='deleted'`; typecheck ✓, build ✓ |
 | Transaction correction expansion (amount + category) | ✓ accepted | `correction-amount-matcher.ts`, `correction-category-matcher.ts`, `correction-edit-session.ts` (new); `correction-repository.ts` + `correction-formatter.ts` + `correction-handler.ts` + `correction-session.ts` (modified); `context_json['pendingCorrection']`; mutual exclusion with pendingDelete + pendingTransaction; parse_status set to 'corrected'; typecheck ✓, build ✓ |
+| Monthly budget / category limit foundation | ✓ accepted | `supabase/migrations/20260324_002_add_monthly_budgets.sql`; `telegram/budgets/`: command-matcher, repository, formatter, handler; set/show/list commands; `monthly_budgets` table with unique constraint per user/category/month; DB trigger enforces expense-only; `update-router.ts` wired between analytics and correction; typecheck ✓, build ✓ |
+| Budget-aware daily recommendation expansion | ✓ accepted | `worker/src/daily-recommendations/repository.ts`: `BudgetStatusRow`, `loadUserBudgetStatuses` (current-month budgets with spending from confirmed+corrected transactions); `calculator.ts`: `BudgetSignal`, `BudgetSignalKind`, `selectBudgetSignals` (on_track/near_limit/over_budget at 80% threshold); `formatter.ts`: `budgetSignals` field on `RecommendationParams`, warning lines appended for near_limit+over_budget categories; `handlers/generate.ts`: loads budgets, computes signals, extends `payload_json.budgets`, passes signals to formatter; typecheck ✓, build ✓ |
 
 ---
 
@@ -77,6 +79,8 @@ The approved implementation order from CLAUDE.md:
 Implement real billing / payment provider integration (replace stub with actual invoice/payment flow).
 
 Or extend admin-web: add Dockerfile + render.yaml entry, or add HTTP Basic Auth middleware.
+
+Or add a budget-alert worker job: proactively notify users when a category crosses 80% or 100% of its monthly limit.
 
 ---
 

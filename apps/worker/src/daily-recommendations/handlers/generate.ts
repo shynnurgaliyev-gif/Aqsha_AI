@@ -2,10 +2,11 @@ import type { JobHandler } from '../../job-queue/types';
 import {
   findUser,
   calculateDailyStats,
+  loadUserBudgetStatuses,
   insertRecommendationIfNew,
   enqueueDeliveryJob,
 } from '../repository';
-import { calculateDaysRemaining, calculateSafeDailySpend } from '../calculator';
+import { calculateDaysRemaining, calculateSafeDailySpend, selectBudgetSignals } from '../calculator';
 import { formatRecommendationMessage } from '../formatter';
 
 /**
@@ -58,6 +59,10 @@ export const dailyRecommendationGenerateHandler: JobHandler = async (job, ctx) =
   const daysRemaining = calculateDaysRemaining(stats.todayLocalDate);
   const safeDailySpend = calculateSafeDailySpend(stats.balance, daysRemaining);
 
+  // ── 3b. Load budget statuses and classify signals ─────────────────────────
+  const budgets = await loadUserBudgetStatuses(db, userId, user.timezone);
+  const budgetSignals = selectBudgetSignals(budgets);
+
   // ── 4. Format message ─────────────────────────────────────────────────────
   const messageText = formatRecommendationMessage({
     balance: stats.balance,
@@ -65,6 +70,7 @@ export const dailyRecommendationGenerateHandler: JobHandler = async (job, ctx) =
     monthIncome: stats.monthIncome,
     safeDailySpend,
     daysRemaining,
+    budgetSignals,
   });
 
   const payloadJson: Record<string, unknown> = {
@@ -74,6 +80,13 @@ export const dailyRecommendationGenerateHandler: JobHandler = async (job, ctx) =
     safeDailySpend,
     daysRemaining,
     timezone: user.timezone,
+    budgets: budgetSignals.map((s) => ({
+      categoryName: s.categoryName,
+      budgetAmount: s.budgetAmount,
+      spent: s.spent,
+      remaining: s.remaining,
+      signal: s.kind,
+    })),
   };
 
   // ── 5. Insert recommendation (idempotent) ─────────────────────────────────
