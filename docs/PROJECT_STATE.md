@@ -13,7 +13,7 @@
 
 ## Current Phase
 
-**Budget-aware daily recommendations done. Real billing integration and admin work remain.**
+**Admin-web access protection done. Real billing integration and admin-web Dockerfile remain.**
 
 The approved implementation order from CLAUDE.md:
 1. ~~Lock architecture~~ ✓
@@ -63,13 +63,13 @@ The approved implementation order from CLAUDE.md:
 | Transaction correction expansion (amount + category) | ✓ accepted | `correction-amount-matcher.ts`, `correction-category-matcher.ts`, `correction-edit-session.ts` (new); `correction-repository.ts` + `correction-formatter.ts` + `correction-handler.ts` + `correction-session.ts` (modified); `context_json['pendingCorrection']`; mutual exclusion with pendingDelete + pendingTransaction; parse_status set to 'corrected'; typecheck ✓, build ✓ |
 | Monthly budget / category limit foundation | ✓ accepted | `supabase/migrations/20260324_002_add_monthly_budgets.sql`; `telegram/budgets/`: command-matcher, repository, formatter, handler; set/show/list commands; `monthly_budgets` table with unique constraint per user/category/month; DB trigger enforces expense-only; `update-router.ts` wired between analytics and correction; typecheck ✓, build ✓ |
 | Budget-aware daily recommendation expansion | ✓ accepted | `worker/src/daily-recommendations/repository.ts`: `BudgetStatusRow`, `loadUserBudgetStatuses` (current-month budgets with spending from confirmed+corrected transactions); `calculator.ts`: `BudgetSignal`, `BudgetSignalKind`, `selectBudgetSignals` (on_track/near_limit/over_budget at 80% threshold); `formatter.ts`: `budgetSignals` field on `RecommendationParams`, warning lines appended for near_limit+over_budget categories; `handlers/generate.ts`: loads budgets, computes signals, extends `payload_json.budgets`, passes signals to formatter; typecheck ✓, build ✓ |
+| Admin-web internal access protection | ✓ accepted | `src/middleware.ts`: HTTP Basic Auth gate; `ADMIN_SECRET` env var required; missing secret → 503; wrong/absent credentials → 401 + `WWW-Authenticate: Basic`; `/api/health` excluded via matcher (open for Render health checks); `_next/*` excluded; `.env.example` updated with `ADMIN_SECRET=`; typecheck ✓, build ✓ |
 
 ---
 
 ## Not Started
 
 - Real billing / payment provider integration (replace stub with actual payment flow)
-- Admin dashboard: auth layer (currently no login — internal network only)
 - Admin dashboard: Dockerfile + render.yaml entry for admin-web service
 
 ---
@@ -78,7 +78,7 @@ The approved implementation order from CLAUDE.md:
 
 Implement real billing / payment provider integration (replace stub with actual invoice/payment flow).
 
-Or extend admin-web: add Dockerfile + render.yaml entry, or add HTTP Basic Auth middleware.
+Or add Dockerfile + render.yaml entry for admin-web (ADR-001 requires Docker deployment for all services).
 
 Or add a budget-alert worker job: proactively notify users when a category crosses 80% or 100% of its monthly limit.
 

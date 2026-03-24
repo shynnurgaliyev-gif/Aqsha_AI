@@ -811,3 +811,27 @@ interface AdminEvent {
 **Dependencies added:** none
 
 **Verification:** `pnpm --filter @aqsha-ai/worker exec tsc --noEmit` ✓, `pnpm --filter @aqsha-ai/worker build` ✓
+
+---
+
+## 2026-03-24 — Admin-web Internal Access Protection (apps/admin-web)
+
+**Task:** Add a minimal internal access gate to the admin dashboard so it is not openly accessible when deployed.
+
+**Result:** All admin-web routes are now protected by HTTP Basic Auth via a Next.js middleware. Access requires the `ADMIN_SECRET` env var to be set and the correct password to be sent in the `Authorization: Basic` header. Browsers show a native credential popup. `/api/health` is excluded and stays open for Render health checks.
+
+**Files affected:**
+- `apps/admin-web/src/middleware.ts` (new — `middleware()` function: reads `ADMIN_SECRET`, validates `Authorization: Basic` header, returns 503 if secret unconfigured, 401 + `WWW-Authenticate` if credentials wrong/missing, passes through if correct; `config.matcher` excludes `/api/health`, `/_next/*`, `/favicon.ico`)
+- `.env.example` (modified — added `ADMIN_SECRET=` under `# Admin` section)
+
+**Key behavior:**
+- `ADMIN_SECRET` not set → 503 "ADMIN_SECRET is not configured." — fail-safe, not an open door
+- Wrong or missing credentials → 401 + `WWW-Authenticate: Basic realm="Aqsha AI Admin"`
+- Correct password (any username) → request passes through to dashboard
+- `/api/health` → always open; no credentials required
+- `atob()` used for base64 decode (Edge runtime compatible, no `Buffer`)
+- HTTPS required in production for Basic Auth to be secure; Render enforces HTTPS by default
+
+**Dependencies added:** none
+
+**Verification:** `pnpm --filter @aqsha-ai/admin-web typecheck` ✓, `pnpm --filter @aqsha-ai/admin-web build` ✓ (middleware compiled, 32.9 kB)
