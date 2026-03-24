@@ -625,8 +625,39 @@ VALUES ('noop', 'pending', now());
 - Subscription status is never changed; no access is granted
 - PAYWALL_MESSAGE now includes "Напишите «оплатить»…" to guide expired users
 
-**Side-finding (not fixed in this task):** admin-web `getRecentAdminEvents` query references columns `actor_id`, `target_user_id`, `metadata` that do not exist in the actual `admin_events` schema. Actual columns: `user_id`, `event_source`, `event_payload`. Tracked in PROJECT_STATE.md "Not Started".
+**Side-finding (fixed in subsequent task):** admin-web `getRecentAdminEvents` query referenced columns `actor_id`, `target_user_id`, `metadata` that do not exist in the actual `admin_events` schema. Fixed in "Admin-web admin_events Query Fix" entry below.
 
 **Dependencies added:** none
 
 **Verification:** `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓
+
+---
+
+## 2026-03-23 — Admin-web admin_events Query Fix (apps/admin-web)
+
+**Task:** Fix the `getRecentAdminEvents` query and `AdminEvent` interface in admin-web to match the real `public.admin_events` DB schema.
+
+**Result:** Query and interface now reference only columns that exist. Admin events table on the dashboard renders correctly at runtime.
+
+**Root cause:** When admin-web was bootstrapped, the `AdminEvent` interface and SELECT were written against a presumed schema (`actor_id`, `target_user_id`, `metadata`) that does not match the actual migration (`user_id`, `event_source`, `severity`, `event_payload`). The mismatch was caught as a side-finding during the billing stub implementation.
+
+**Files affected:**
+- `apps/admin-web/src/lib/queries.ts` (modified — `AdminEvent` interface corrected; SELECT rewritten to use real columns; `id::text` cast added for bigint)
+- `apps/admin-web/src/app/page.tsx` (modified — admin events table headers changed from "Actor"/"Target user" to "Source"/"User"; cells now render `ev.event_source` and `ev.user_id`)
+
+**Corrected interface:**
+```typescript
+interface AdminEvent {
+  id: string;           // bigint cast to ::text in query
+  event_type: string;
+  user_id: string | null;
+  event_source: string;
+  severity: string;
+  event_payload: Record<string, unknown>;
+  created_at: string;
+}
+```
+
+**Dependencies added:** none
+
+**Verification:** `pnpm --filter @aqsha-ai/admin-web typecheck` ✓, `cd apps/admin-web && next build` ✓

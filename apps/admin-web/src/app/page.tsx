@@ -159,8 +159,8 @@ export default async function DashboardPage() {
             <thead>
               <tr>
                 <th>Event type</th>
-                <th>Actor</th>
-                <th>Target user</th>
+                <th>Source</th>
+                <th>User</th>
                 <th>Created</th>
               </tr>
             </thead>
@@ -168,11 +168,9 @@ export default async function DashboardPage() {
               {events.map((ev: AdminEvent) => (
                 <tr key={ev.id}>
                   <td>{statusTag(ev.event_type)}</td>
+                  <td>{ev.event_source}</td>
                   <td style={{ fontFamily: 'monospace', fontSize: 11 }}>
-                    {ev.actor_id ? ev.actor_id.slice(0, 8) + '…' : '—'}
-                  </td>
-                  <td style={{ fontFamily: 'monospace', fontSize: 11 }}>
-                    {ev.target_user_id ? ev.target_user_id.slice(0, 8) + '…' : '—'}
+                    {ev.user_id ? ev.user_id.slice(0, 8) + '…' : '—'}
                   </td>
                   <td style={{ whiteSpace: 'nowrap' }}>{ev.created_at}</td>
                 </tr>

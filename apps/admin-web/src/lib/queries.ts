@@ -82,18 +82,19 @@ export async function getRecommendationCounts(): Promise<RecommendationCounts> {
 // ---------------------------------------------------------------------------
 
 export interface AdminEvent {
-  id: string;
+  id: string;           // bigint in DB — cast to text in query
   event_type: string;
-  actor_id: string | null;
-  target_user_id: string | null;
-  metadata: Record<string, unknown> | null;
+  user_id: string | null;
+  event_source: string;
+  severity: string;
+  event_payload: Record<string, unknown>;
   created_at: string;
 }
 
 export async function getRecentAdminEvents(limit = 20): Promise<AdminEvent[]> {
   const db = getDb();
   const rows = await db<AdminEvent[]>`
-    SELECT id, event_type, actor_id, target_user_id, metadata, created_at::text AS created_at
+    SELECT id::text, event_type, user_id, event_source, severity, event_payload, created_at::text AS created_at
       FROM public.admin_events
      ORDER BY created_at DESC
      LIMIT ${limit}
