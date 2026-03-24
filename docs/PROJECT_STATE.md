@@ -13,7 +13,7 @@
 
 ## Current Phase
 
-**Billing/payment stub foundation complete. Real billing integration and admin work remain.**
+**Transaction correction foundation complete. Real billing integration and admin work remain.**
 
 The approved implementation order from CLAUDE.md:
 1. ~~Lock architecture~~ ✓
@@ -58,6 +58,8 @@ The approved implementation order from CLAUDE.md:
 | CI/CD foundation | ✓ accepted | `.github/workflows/ci.yml`; two jobs: `build` (typecheck + build all packages and apps) and `docker` (Docker image validation for bot-api and worker); pnpm store cached; triggers on all pushes and PRs to main/dev |
 | Billing/payment stub foundation | ✓ accepted | `telegram/billing/`: `billing-command-matcher.ts`, `billing-formatter.ts`, `billing-service.ts`; billing commands ("оплатить", "подписка", "pay", …) checked before access gate; `admin_events` row on intent; improved paywall message; typecheck ✓, build ✓ |
 | Admin-web admin_events query fix | ✓ accepted | `queries.ts`: `AdminEvent` interface + SELECT corrected to real columns (`user_id`, `event_source`, `severity`, `event_payload`); `page.tsx`: table headers/cells updated; typecheck ✓, build ✓ |
+| Transaction correction foundation | ✓ accepted | `telegram/transaction-correction/`: matcher, repository, session, formatter, handler; show-recent + delete-last commands; pending-delete state in `context_json['pendingDelete']`; soft-delete via `is_deleted`/`deleted_at`/`parse_status='deleted'`; mutual exclusion with pendingTransaction; typecheck ✓, build ✓ |
+| Soft-delete parse_status alignment | ✓ accepted | `softDeleteTransaction` now also sets `parse_status = 'deleted'`; post-delete state: `is_deleted=true`, `deleted_at=<ts>`, `parse_status='deleted'`; typecheck ✓, build ✓ |
 
 ---
 
@@ -72,6 +74,8 @@ The approved implementation order from CLAUDE.md:
 ## Next Recommended Step
 
 Implement real billing / payment provider integration (replace stub with actual invoice/payment flow).
+
+Or extend transaction correction: add edit-amount or edit-category support.
 
 Or extend admin-web: add Dockerfile + render.yaml entry, or add HTTP Basic Auth middleware.
 

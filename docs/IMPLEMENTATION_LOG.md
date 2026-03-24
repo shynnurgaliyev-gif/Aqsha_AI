@@ -661,3 +661,44 @@ interface AdminEvent {
 **Dependencies added:** none
 
 **Verification:** `pnpm --filter @aqsha-ai/admin-web typecheck` ✓, `cd apps/admin-web && next build` ✓
+
+---
+
+## 2026-03-24 — Transaction Correction Foundation (apps/bot-api)
+
+**Task:** Add a deterministic correction flow allowing users to view recent transactions and safely soft-delete the last one via an explicit confirmation step.
+
+**Result:** Users can send "мои последние операции" / "recent transactions" to see recent entries, and "удалить последнюю операцию" (or variants) to start a delete flow. Deletion requires "да" confirmation; "нет" cancels. Soft delete sets `is_deleted = true, deleted_at = now()`. Pending delete state is stored in `context_json['pendingDelete']` and is mutually exclusive with `pendingTransaction`.
+
+**Files affected:**
+- `apps/bot-api/src/telegram/transaction-correction/correction-command-matcher.ts` (new — `matchCorrectionCommand`, show_recent + delete_last tokens)
+- `apps/bot-api/src/telegram/transaction-correction/correction-repository.ts` (new — `findLastTransaction`, `softDeleteTransaction`, `queryRecentForCorrection`)
+- `apps/bot-api/src/telegram/transaction-correction/correction-session.ts` (new — `getPendingDelete`, `setPendingDelete`, `clearPendingDelete`)
+- `apps/bot-api/src/telegram/transaction-correction/correction-formatter.ts` (new — `formatRecentForCorrection`, `formatDeletePrompt`, `formatDeleteSuccess`, string constants)
+- `apps/bot-api/src/telegram/transaction-correction/correction-handler.ts` (new — `handleCorrectionFlow`, returns `string | null`)
+- `apps/bot-api/src/telegram/update-router.ts` (modified — `handleCorrectionFlow` wired between analytics and text intake in message case)
+
+**Message routing order (message case):**
+1. Billing commands (all users, before access gate)
+2. Access gate
+3. `handleAnalyticsQuery` — returns null if no match
+4. `handleCorrectionFlow` — returns null if no match (NEW)
+5. `handleTextMessage` — text intake + pending create-draft confirmation
+
+**Key behavior:**
+- `setPendingDelete` removes `pendingTransaction` from context_json to prevent да/нет ambiguity
+- Both pending states use `session_status = 'awaiting_confirmation'` (within schema CHECK constraint)
+- While pendingDelete is active, all input is intercepted: да/нет handled, anything else returns reminder
+- Soft delete: `UPDATE transactions SET is_deleted = true, deleted_at = now() WHERE id = $id AND user_id = $userId AND is_deleted = false AND parse_status = 'confirmed'`
+- Returns false (and `DELETE_FAILED` message) if row not found / already deleted
+- "show_recent" tokens deliberately exclude analytics tokens to avoid routing ambiguity
+
+**Supported commands:**
+- show_recent: "мои последние операции", "recent transactions"
+- delete_last: "удалить последнюю", "удалить последнюю операцию", "удалить последнее", "delete last", "delete last transaction"
+- confirm: "да", "yes", "подтвердить", "confirm", "ok", "ок", "+"
+- cancel: "нет", "no", "отмена", "cancel", "отменить", "-"
+
+**Dependencies added:** none
+
+**Verification:** `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓
