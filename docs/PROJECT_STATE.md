@@ -13,7 +13,7 @@
 
 ## Current Phase
 
-**Transaction correction foundation complete. Real billing integration and admin work remain.**
+**Transaction correction expanded (amount + category). Real billing integration and admin work remain.**
 
 The approved implementation order from CLAUDE.md:
 1. ~~Lock architecture~~ ✓
@@ -60,6 +60,7 @@ The approved implementation order from CLAUDE.md:
 | Admin-web admin_events query fix | ✓ accepted | `queries.ts`: `AdminEvent` interface + SELECT corrected to real columns (`user_id`, `event_source`, `severity`, `event_payload`); `page.tsx`: table headers/cells updated; typecheck ✓, build ✓ |
 | Transaction correction foundation | ✓ accepted | `telegram/transaction-correction/`: matcher, repository, session, formatter, handler; show-recent + delete-last commands; pending-delete state in `context_json['pendingDelete']`; soft-delete via `is_deleted`/`deleted_at`/`parse_status='deleted'`; mutual exclusion with pendingTransaction; typecheck ✓, build ✓ |
 | Soft-delete parse_status alignment | ✓ accepted | `softDeleteTransaction` now also sets `parse_status = 'deleted'`; post-delete state: `is_deleted=true`, `deleted_at=<ts>`, `parse_status='deleted'`; typecheck ✓, build ✓ |
+| Transaction correction expansion (amount + category) | ✓ accepted | `correction-amount-matcher.ts`, `correction-category-matcher.ts`, `correction-edit-session.ts` (new); `correction-repository.ts` + `correction-formatter.ts` + `correction-handler.ts` + `correction-session.ts` (modified); `context_json['pendingCorrection']`; mutual exclusion with pendingDelete + pendingTransaction; parse_status set to 'corrected'; typecheck ✓, build ✓ |
 
 ---
 
@@ -74,8 +75,6 @@ The approved implementation order from CLAUDE.md:
 ## Next Recommended Step
 
 Implement real billing / payment provider integration (replace stub with actual invoice/payment flow).
-
-Or extend transaction correction: add edit-amount or edit-category support.
 
 Or extend admin-web: add Dockerfile + render.yaml entry, or add HTTP Basic Auth middleware.
 

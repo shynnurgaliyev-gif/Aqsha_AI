@@ -719,3 +719,39 @@ interface AdminEvent {
 **Dependencies added:** none
 
 **Verification:** `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓
+
+---
+
+## 2026-03-24 — Transaction Correction Expansion: Amount + Category (apps/bot-api)
+
+**Task:** Extend the correction flow to allow users to correct the amount or category of their latest confirmed transaction via an explicit confirmation step.
+
+**Result:** Users can correct the amount ("сумма 3500", "исправь сумму на 3500", "set amount 3500") or the category ("категория еда", "исправь категорию на еда", "set category food") of their latest confirmed non-deleted transaction. Both flows require explicit да/нет confirmation before the DB is updated. Pending correction state is stored in `context_json['pendingCorrection']` and is mutually exclusive with `pendingTransaction` and `pendingDelete`.
+
+**Files affected:**
+- `apps/bot-api/src/telegram/transaction-correction/correction-amount-matcher.ts` (new — `matchAmountCorrection`, 4 regex patterns, returns `number | null`)
+- `apps/bot-api/src/telegram/transaction-correction/correction-category-matcher.ts` (new — `matchCategoryCorrection`, 4 regex patterns, returns `string | null`)
+- `apps/bot-api/src/telegram/transaction-correction/correction-edit-session.ts` (new — `PendingCorrectionState`, `getPendingCorrection`, `setPendingCorrection`, `clearPendingCorrection`)
+- `apps/bot-api/src/telegram/transaction-correction/correction-repository.ts` (modified — added `updateTransactionAmount`, `updateTransactionCategory`)
+- `apps/bot-api/src/telegram/transaction-correction/correction-formatter.ts` (modified — added `formatCorrectionAmountPrompt`, `formatCorrectionCategoryPrompt`, `formatCorrectionSuccess`, 4 string constants)
+- `apps/bot-api/src/telegram/transaction-correction/correction-session.ts` (modified — `setPendingDelete` now also removes `pendingCorrection` key)
+- `apps/bot-api/src/telegram/transaction-correction/correction-handler.ts` (modified — pending correction step added as priority 1; amount + category command paths added as steps 4–5)
+
+**Handler priority (final):**
+1. `pendingCorrection` active → да/нет/other
+2. `pendingDelete` active → да/нет/other
+3. `matchCorrectionCommand` → show_recent / delete_last
+4. `matchAmountCorrection` → find last confirmed tx → setPendingCorrection → prompt
+5. `matchCategoryCorrection` → find last confirmed tx → resolveCategory (kind-matched) → setPendingCorrection → prompt
+6. return null
+
+**Key behavior:**
+- Category resolution reuses `resolveCategory` from `text-intake/category-resolver`; kind must match the transaction's kind
+- UPDATE WHERE guard: `AND parse_status = 'confirmed'` — only confirmed rows are correctable; post-update `parse_status = 'corrected'`
+- DB trigger re-validates category kind on UPDATE — application-level check is primary, DB is safety net
+- `setPendingCorrection` removes both `pendingTransaction` and `pendingDelete` to prevent да/нет ambiguity
+- Concurrent change (row deleted between initiation and confirmation) → `CORRECTION_FAILED` message, state cleared
+
+**Dependencies added:** none
+
+**Verification:** `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓

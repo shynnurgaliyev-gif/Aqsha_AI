@@ -6,6 +6,7 @@ import { bootstrapUser } from './user-bootstrap-service';
 import { checkSubscriptionAccess, PAYWALL_MESSAGE } from './access-control';
 import { matchBillingCommand } from './billing/billing-command-matcher';
 import { handleBillingCommand } from './billing/billing-service';
+import { handleBudgetCommand } from './budgets/budget-handler';
 import { handleCorrectionFlow } from './transaction-correction/correction-handler';
 import { handleTextMessage } from './text-intake/handler';
 import { handleVoiceMessage } from './voice-intake/handler';
@@ -62,17 +63,26 @@ export async function routeTelegramUpdate(
           logger.info({ updateId: update.update_id }, 'Analytics query handled');
           await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: analyticsResponse }, logger);
         } else {
-          // Correction flow: handles pending delete confirmation and correction commands.
-          // Returns null to fall through to text intake when nothing matches.
-          const correctionResponse = await handleCorrectionFlow(msg.text ?? '', userId, db, logger);
+          // Budget commands: set / show / list monthly category budgets.
+          // Returns null if the text is not a recognised budget command.
+          const budgetResponse = await handleBudgetCommand(msg.text ?? '', userId, db, logger);
 
-          if (correctionResponse !== null) {
-            logger.info({ updateId: update.update_id }, 'Correction flow handled');
-            await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: correctionResponse }, logger);
+          if (budgetResponse !== null) {
+            logger.info({ updateId: update.update_id }, 'Budget command handled');
+            await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: budgetResponse }, logger);
           } else {
-            const result = await handleTextMessage(msg, userId, db, logger);
-            logger.info({ updateId: update.update_id, resultKind: result.kind }, 'Text message handled');
-            await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: result.message }, logger);
+            // Correction flow: handles pending state confirmation and correction commands.
+            // Returns null to fall through to text intake when nothing matches.
+            const correctionResponse = await handleCorrectionFlow(msg.text ?? '', userId, db, logger);
+
+            if (correctionResponse !== null) {
+              logger.info({ updateId: update.update_id }, 'Correction flow handled');
+              await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: correctionResponse }, logger);
+            } else {
+              const result = await handleTextMessage(msg, userId, db, logger);
+              logger.info({ updateId: update.update_id, resultKind: result.kind }, 'Text message handled');
+              await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: result.message }, logger);
+            }
           }
         }
       }
