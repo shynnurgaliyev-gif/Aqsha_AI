@@ -1,7 +1,9 @@
 import type { FastifyBaseLogger } from 'fastify';
+import type { AppEnv } from '@aqsha-ai/config';
 import type { DbPool } from '@aqsha-ai/database';
 import type { TelegramMessage } from '../types';
 import { parseIntakeText } from './parser';
+import { parseWithAi } from './ai-parser';
 import { resolveCategory } from './category-resolver';
 import { getPendingDraft, setPendingDraft, clearPendingDraft } from './session-draft';
 import { insertConfirmedTransaction } from './transaction-inserter';
@@ -40,6 +42,7 @@ export async function handleTextMessage(
   message: TelegramMessage,
   userId: string,
   db: DbPool,
+  env: AppEnv,
   logger: FastifyBaseLogger,
 ): Promise<IntakeResult> {
   const text = message.text?.trim() ?? '';
@@ -74,7 +77,17 @@ export async function handleTextMessage(
   }
 
   // ── B. New intake path ───────────────────────────────────────────────────────
-  const parsed = parseIntakeText(text);
+  // Stage 1: cheap deterministic parser.
+  // Stage 2: AI fallback for broader natural-language input.
+  // If both fail, return a safe unsupported response — no draft is created.
+  let parsed = parseIntakeText(text);
+
+  if (!parsed) {
+    parsed = await parseWithAi(text, env.OPENAI_API_KEY, env.OPENAI_MODEL, logger);
+    if (parsed) {
+      logger.info({ userId, kind: parsed.kind, amount: parsed.amount }, 'Text intake: AI parse used');
+    }
+  }
 
   if (!parsed) {
     return {

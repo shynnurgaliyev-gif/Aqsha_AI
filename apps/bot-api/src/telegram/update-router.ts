@@ -79,7 +79,7 @@ export async function routeTelegramUpdate(
               logger.info({ updateId: update.update_id }, 'Correction flow handled');
               await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: correctionResponse }, logger);
             } else {
-              const result = await handleTextMessage(msg, userId, db, logger);
+              const result = await handleTextMessage(msg, userId, db, env, logger);
               logger.info({ updateId: update.update_id, resultKind: result.kind }, 'Text message handled');
               await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: result.message }, logger);
             }

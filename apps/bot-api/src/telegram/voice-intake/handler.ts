@@ -82,5 +82,5 @@ export async function handleVoiceMessage(
     text: transcript,
   };
 
-  return handleTextMessage(syntheticMessage, userId, db, logger);
+  return handleTextMessage(syntheticMessage, userId, db, env, logger);
 }
