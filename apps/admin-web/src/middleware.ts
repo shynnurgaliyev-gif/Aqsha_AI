@@ -4,6 +4,29 @@ import type { NextRequest } from 'next/server';
 const REALM = 'Aqsha AI Admin';
 
 /**
+ * Pure-JS base64 decode. Does not rely on `atob` being available as a global,
+ * which is unreliable in the Next.js Edge Runtime sandbox.
+ */
+function base64Decode(str: string): string {
+  const table = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let out = '';
+  let bits = 0;
+  let count = 0;
+  for (const ch of str) {
+    if (ch === '=') break;
+    const v = table.indexOf(ch);
+    if (v === -1) break;
+    bits = (bits << 6) | v;
+    count += 6;
+    if (count >= 8) {
+      count -= 8;
+      out += String.fromCharCode((bits >>> count) & 0xff);
+    }
+  }
+  return out;
+}
+
+/**
  * Internal access protection for the admin dashboard.
  *
  * Uses HTTP Basic Auth against the ADMIN_SECRET environment variable.
@@ -17,7 +40,8 @@ const REALM = 'Aqsha AI Admin';
  * /api/health is excluded via the matcher and stays open for health checks.
  */
 export function middleware(request: NextRequest): NextResponse {
-  const secret = process.env.ADMIN_SECRET;
+  // .trim() guards against trailing whitespace from .env files.
+  const secret = (process.env.ADMIN_SECRET ?? '').trim();
 
   // Fail-safe: block all access when the secret is not configured.
   if (!secret) {
@@ -30,14 +54,8 @@ export function middleware(request: NextRequest): NextResponse {
   const authHeader = request.headers.get('authorization') ?? '';
 
   if (authHeader.startsWith('Basic ')) {
-    const encoded = authHeader.slice('Basic '.length);
-
-    let decoded: string;
-    try {
-      decoded = atob(encoded);
-    } catch {
-      decoded = '';
-    }
+    const encoded = authHeader.slice('Basic '.length).trim();
+    const decoded = base64Decode(encoded);
 
     // Basic auth format: "username:password" — only the password is validated.
     const colonIndex = decoded.indexOf(':');

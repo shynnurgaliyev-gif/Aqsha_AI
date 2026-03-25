@@ -110,8 +110,8 @@ export async function getRecentAdminEvents(limit = 20): Promise<AdminEvent[]> {
 export interface FailedJob {
   id: string;
   job_type: string;
-  payload: Record<string, unknown>;
-  error_message: string | null;
+  payload_json: Record<string, unknown>;
+  last_error: string | null;
   attempts: number;
   updated_at: string;
 }
@@ -119,7 +119,7 @@ export interface FailedJob {
 export async function getRecentFailedJobs(limit = 10): Promise<FailedJob[]> {
   const db = getDb();
   const rows = await db<FailedJob[]>`
-    SELECT id, job_type, payload, error_message, attempts, updated_at::text AS updated_at
+    SELECT id::text, job_type, payload_json, last_error, attempts, updated_at::text AS updated_at
       FROM public.job_queue
      WHERE status = 'failed'
      ORDER BY updated_at DESC

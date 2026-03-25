@@ -132,7 +132,7 @@ export default async function DashboardPage() {
                   <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{job.id.slice(0, 8)}…</td>
                   <td>{job.job_type}</td>
                   <td>{job.attempts}</td>
-                  <td style={{ color: '#dc2626', maxWidth: 300 }}>{job.error_message ?? '—'}</td>
+                  <td style={{ color: '#dc2626', maxWidth: 300 }}>{job.last_error ?? '—'}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{job.updated_at}</td>
                 </tr>
               ))}
