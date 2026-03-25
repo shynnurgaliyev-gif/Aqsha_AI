@@ -888,3 +888,32 @@ interface AdminEvent {
 **Dependencies added:** none (uses native `fetch`)
 
 **Verification:** `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓
+
+---
+
+## 2026-03-25 — Deterministic Analytics Period Support Expansion (apps/bot-api)
+
+**Task:** Expand the analytics query layer to answer period-based finance questions (today, yesterday, current week, previous month) entirely through deterministic SQL — no financial values from LLM.
+
+**Result:** Introduced `AnalyticsPeriod` and `AnalyticsQuery = {type, period}` structs across all analytics files. All 5 periods have explicit SQL backing. The AI parser now covers all supported periods (no more period restrictions). The handler dispatches on `{type, period}` uniformly.
+
+**Files affected:**
+- `apps/bot-api/src/telegram/analytics/query-matcher.ts` (modified — added `AnalyticsPeriod` type, `AnalyticsQuery` interface; renamed `expense_month`/`income_month` → `expense_total`/`income_total`; `matchAnalyticsQuery` returns `AnalyticsQuery | null`; 20+ new deterministic tokens covering today/yesterday/current_week/previous_month for expense, income, and category breakdown)
+- `apps/bot-api/src/telegram/analytics/analytics-repository.ts` (modified — added `queryPeriodTotal(db, userId, kind, period)` and `queryCategoryBreakdownByPeriod(db, userId, kind, period)`; each switches on period with explicit SQL; `current_month` delegates to existing functions; all SQL uses `transaction_date_local`)
+- `apps/bot-api/src/telegram/analytics/formatter.ts` (modified — replaced period-hardcoded formatters with `formatPeriodTotal(kind, total, period)` and `formatCategoryBreakdownByPeriod(kind, rows, period)`; `periodLabel()` maps periods to Russian labels)
+- `apps/bot-api/src/telegram/analytics/ai-query-parser.ts` (modified — added `'yesterday'` to system prompt and `VALID_PERIODS`; `mapToQueryType` → `mapToAnalyticsQuery` returns `AnalyticsQuery | null`; removed all period restrictions since all periods are now SQL-backed; only category-filter and ambiguous-kind still return null)
+- `apps/bot-api/src/telegram/analytics/handler.ts` (modified — uses `AnalyticsQuery` throughout; switch dispatches on `query.type` with `query.period` passed to period-aware repository and formatter functions)
+
+**Key behavior:**
+- `расходы` → `{type: expense_total, period: current_month}` → SQL current-month total
+- `расходы сегодня` / `расходы за вчера` / `расходы за неделю` → deterministic tokens → period SQL
+- `сколько я потратил сегодня` → AI → `{expense_total, today}` → SQL today total
+- `how much did I earn last month` → AI → `{income_total, previous_month}` → SQL previous-month total
+- Week = ISO week (Monday–Sunday); `date_trunc('week', current_date)` — documented in code
+- Period boundaries use server `current_date` against `transaction_date_local` — consistent with existing layer
+- Category-scoped queries still return null safely (not yet implemented)
+- `balance` and `recent_transactions` are period-agnostic; period field accepted but ignored
+
+**Dependencies added:** none
+
+**Verification:** `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓

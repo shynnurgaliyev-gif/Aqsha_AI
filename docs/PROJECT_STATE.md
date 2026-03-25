@@ -13,7 +13,7 @@
 
 ## Current Phase
 
-**LLM analytics parsing foundation done. Real billing integration and admin-web Dockerfile remain.**
+**Deterministic analytics period support expansion done. Real billing integration and admin-web Dockerfile remain.**
 
 The approved implementation order from CLAUDE.md:
 1. ~~Lock architecture~~ ✓
@@ -66,6 +66,7 @@ The approved implementation order from CLAUDE.md:
 | Admin-web internal access protection | ✓ accepted | `src/middleware.ts`: HTTP Basic Auth gate; `ADMIN_SECRET` env var required; missing secret → 503; wrong/absent credentials → 401 + `WWW-Authenticate: Basic`; `/api/health` excluded via matcher (open for Render health checks); `_next/*` excluded; `.env.example` updated with `ADMIN_SECRET=`; typecheck ✓, build ✓ |
 | LLM transaction parsing foundation | ✓ accepted | `text-intake/ai-parser.ts` (new): OpenAI Chat Completions fallback; `response_format: json_object`, `temperature: 0`, `max_tokens: 150`; strict result validator (kind, positive-integer amount, non-empty category); `handler.ts`: two-stage parse (deterministic first → AI fallback); `env: AppEnv` param added; `voice-intake/handler.ts` + `update-router.ts` updated to pass `env`; no schema changes; typecheck ✓, build ✓ |
 | LLM analytics parsing foundation | ✓ accepted | `analytics/ai-query-parser.ts` (new): OpenAI Chat Completions fallback; extracts `{query_type, period, kind, category}`; strict validator + `mapToQueryType` maps to existing `AnalyticsQueryType` or null (unsupported period/category filter/ambiguous kind → safe null); `handler.ts`: two-stage flow (deterministic first → AI fallback), `env: AppEnv` param added; `update-router.ts` updated to pass `env`; all calculations remain deterministic SQL; no schema changes; typecheck ✓, build ✓ |
+| Deterministic analytics period support expansion | ✓ accepted | `query-matcher.ts`: added `AnalyticsPeriod` (today/yesterday/current_week/previous_month/current_month), `AnalyticsQuery = {type, period}` struct; renamed `expense_month`/`income_month` → `expense_total`/`income_total`; 20+ new deterministic tokens; `analytics-repository.ts`: `queryPeriodTotal` + `queryCategoryBreakdownByPeriod` with SQL for all 5 periods (ISO week / Monday start); `formatter.ts`: `formatPeriodTotal` + `formatCategoryBreakdownByPeriod` with period labels; `ai-query-parser.ts`: added yesterday, removed period restrictions, returns `AnalyticsQuery | null`; `handler.ts`: dispatches on `{type, period}`; no schema changes; typecheck ✓, build ✓ |
 
 ---
 
@@ -78,9 +79,9 @@ The approved implementation order from CLAUDE.md:
 
 ## Next Recommended Step
 
-Add a budget-alert worker job: proactively notify users when a category crosses 80% or 100% of its monthly limit (signals already computed in the daily recommendation flow).
+Extend analytics to support category-scoped queries (e.g. "how much did I spend on food this month") — AI parser already extracts the category candidate and all period SQL is in place; only the category-filtered repository query and safe category resolution are missing.
 
-Or extend analytics query layer to support category-scoped queries (e.g. "how much did I spend on food this month") — AI parser already extracts the category candidate, but `mapToQueryType` returns null until the SQL layer supports it.
+Or add a budget-alert worker job: proactively notify users when a category crosses 80% or 100% of its monthly limit (signals already computed in the daily recommendation flow).
 
 Or implement real billing / payment provider integration (replace stub with actual invoice/payment flow).
 
