@@ -5,14 +5,14 @@ import { matchAnalyticsQuery } from './query-matcher';
 import { parseAnalyticsQueryWithAi } from './ai-query-parser';
 import {
   queryBalance,
-  queryMonthTotal,
-  queryCategoryBreakdown,
+  queryPeriodTotal,
+  queryCategoryBreakdownByPeriod,
   queryRecentTransactions,
 } from './analytics-repository';
 import {
   formatBalance,
-  formatMonthTotal,
-  formatCategoryBreakdown,
+  formatPeriodTotal,
+  formatCategoryBreakdownByPeriod,
   formatRecentTransactions,
 } from './formatter';
 
@@ -38,49 +38,49 @@ export async function handleAnalyticsQuery(
   logger: FastifyBaseLogger,
 ): Promise<string | null> {
   // ── Stage 1: deterministic keyword match ─────────────────────────────────────
-  let queryType = matchAnalyticsQuery(text);
+  let query = matchAnalyticsQuery(text);
 
-  if (queryType) {
-    logger.info({ userId, queryType }, 'Analytics query matched (deterministic)');
+  if (query) {
+    logger.info({ userId, queryType: query.type, period: query.period }, 'Analytics query matched (deterministic)');
   }
 
   // ── Stage 2: AI fallback ─────────────────────────────────────────────────────
-  if (!queryType) {
-    queryType = await parseAnalyticsQueryWithAi(text, env.OPENAI_API_KEY, env.OPENAI_MODEL, logger);
-    if (queryType) {
-      logger.info({ userId, queryType }, 'Analytics query matched via AI');
+  if (!query) {
+    query = await parseAnalyticsQueryWithAi(text, env.OPENAI_API_KEY, env.OPENAI_MODEL, logger);
+    if (query) {
+      logger.info({ userId, queryType: query.type, period: query.period }, 'Analytics query matched via AI');
     }
   }
 
-  if (!queryType) {
+  if (!query) {
     return null;
   }
 
   try {
-    switch (queryType) {
+    switch (query.type) {
       case 'balance': {
         const balance = await queryBalance(db, userId);
         return formatBalance(balance);
       }
 
-      case 'expense_month': {
-        const total = await queryMonthTotal(db, userId, 'expense');
-        return formatMonthTotal('expense', total);
+      case 'expense_total': {
+        const total = await queryPeriodTotal(db, userId, 'expense', query.period);
+        return formatPeriodTotal('expense', total, query.period);
       }
 
-      case 'income_month': {
-        const total = await queryMonthTotal(db, userId, 'income');
-        return formatMonthTotal('income', total);
+      case 'income_total': {
+        const total = await queryPeriodTotal(db, userId, 'income', query.period);
+        return formatPeriodTotal('income', total, query.period);
       }
 
       case 'expense_categories': {
-        const rows = await queryCategoryBreakdown(db, userId, 'expense');
-        return formatCategoryBreakdown('expense', rows);
+        const rows = await queryCategoryBreakdownByPeriod(db, userId, 'expense', query.period);
+        return formatCategoryBreakdownByPeriod('expense', rows, query.period);
       }
 
       case 'income_categories': {
-        const rows = await queryCategoryBreakdown(db, userId, 'income');
-        return formatCategoryBreakdown('income', rows);
+        const rows = await queryCategoryBreakdownByPeriod(db, userId, 'income', query.period);
+        return formatCategoryBreakdownByPeriod('income', rows, query.period);
       }
 
       case 'recent_transactions': {
@@ -89,7 +89,7 @@ export async function handleAnalyticsQuery(
       }
     }
   } catch (err) {
-    logger.error({ err, userId, queryType }, 'Analytics query error');
+    logger.error({ err, userId, queryType: query.type }, 'Analytics query error');
     return 'Не удалось получить данные. Попробуйте позже.';
   }
 }

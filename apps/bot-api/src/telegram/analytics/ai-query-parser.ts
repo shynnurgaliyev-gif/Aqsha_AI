@@ -1,5 +1,5 @@
 import type { FastifyBaseLogger } from 'fastify';
-import type { AnalyticsQueryType } from './query-matcher';
+import type { AnalyticsQuery, AnalyticsPeriod } from './query-matcher';
 
 /**
  * System prompt focused exclusively on analytics intent extraction.
@@ -9,7 +9,7 @@ import type { AnalyticsQueryType } from './query-matcher';
 const SYSTEM_PROMPT = `You are an analytics intent parser for a personal finance app. Your only job is to extract what kind of financial data the user is asking for.
 
 Return a JSON object with EXACTLY this shape:
-{"result": {"query_type": "balance" | "expense_total" | "income_total" | "category_breakdown" | "recent_transactions", "period": "current_month" | "previous_month" | "current_week" | "today" | null, "kind": "expense" | "income" | null, "category": "<string or null>"}}
+{"result": {"query_type": "balance" | "expense_total" | "income_total" | "category_breakdown" | "recent_transactions", "period": "current_month" | "previous_month" | "current_week" | "today" | "yesterday" | null, "kind": "expense" | "income" | null, "category": "<string or null>"}}
 
 Return {"result": null} when:
 - the message is not a request for financial data or analytics
@@ -27,7 +27,7 @@ Rules:
 - category: specific category name if the user mentions one (e.g. "food", "еда"); null if none mentioned
 - if in doubt, return {"result": null}`;
 
-type AiPeriod = 'current_month' | 'previous_month' | 'current_week' | 'today' | null;
+type AiPeriod = AnalyticsPeriod | null;
 type AiQueryType =
   | 'balance'
   | 'expense_total'
@@ -69,42 +69,44 @@ const VALID_PERIODS = new Set<string>([
   'previous_month',
   'current_week',
   'today',
+  'yesterday',
 ]);
 
 /**
- * Maps a validated AI analytics result to an AnalyticsQueryType
- * supported by the existing deterministic query layer.
+ * Maps a validated AI analytics result to an AnalyticsQuery.
  *
- * Returns null if the intent cannot be safely fulfilled:
- * - unsupported period (only current_month or null is handled by current SQL)
- * - category filter requested (category-scoped queries not yet implemented)
- * - ambiguous kind for category_breakdown
+ * Returns null only if:
+ * - category filter is requested (category-scoped queries not yet implemented)
+ * - kind is ambiguous for category_breakdown
+ *
+ * All periods in VALID_PERIODS are now supported by the deterministic SQL layer,
+ * so no period is rejected here. Null period defaults to current_month.
  */
-function mapToQueryType(result: AiAnalyticsResult): AnalyticsQueryType | null {
-  const { query_type, period, kind, category } = result;
+function mapToAnalyticsQuery(result: AiAnalyticsResult): AnalyticsQuery | null {
+  const { query_type, period: aiPeriod, kind, category } = result;
+
+  // Null period defaults to current_month for all query types.
+  const period: AnalyticsPeriod = aiPeriod ?? 'current_month';
 
   switch (query_type) {
     case 'balance':
-      return 'balance';
+      return { type: 'balance', period: 'current_month' }; // period irrelevant for balance
 
     case 'expense_total':
-      if (period !== null && period !== 'current_month') return null;
-      return 'expense_month';
+      return { type: 'expense_total', period };
 
     case 'income_total':
-      if (period !== null && period !== 'current_month') return null;
-      return 'income_month';
+      return { type: 'income_total', period };
 
     case 'category_breakdown': {
       if (category !== null) return null; // category-scoped queries not yet supported
-      if (period !== null && period !== 'current_month') return null;
-      if (kind === 'expense') return 'expense_categories';
-      if (kind === 'income') return 'income_categories';
-      return null; // ambiguous kind
+      if (kind === 'expense') return { type: 'expense_categories', period };
+      if (kind === 'income') return { type: 'income_categories', period };
+      return null; // ambiguous kind — cannot safely infer expense vs income
     }
 
     case 'recent_transactions':
-      return 'recent_transactions';
+      return { type: 'recent_transactions', period: 'current_month' }; // period irrelevant
 
     default:
       return null;
@@ -136,7 +138,7 @@ function validateAiAnalyticsResult(raw: unknown): AiAnalyticsResult | null {
   if (rawPeriod === null || rawPeriod === undefined) {
     period = null;
   } else if (typeof rawPeriod === 'string' && VALID_PERIODS.has(rawPeriod)) {
-    period = rawPeriod as AiPeriod;
+    period = rawPeriod as AnalyticsPeriod;
   } else {
     return null;
   }
@@ -175,11 +177,12 @@ function validateAiAnalyticsResult(raw: unknown): AiAnalyticsResult | null {
  * Attempts to parse a natural-language analytics query using the
  * OpenAI Chat Completions API.
  *
- * Returns an AnalyticsQueryType if the model extracts a clear, supported intent.
+ * Returns an AnalyticsQuery if the model extracts a clear, supported intent.
  * Returns null if:
  *   - the text is not recognisable as an analytics query
- *   - the intent maps to an unsupported query type or period
- *   - model output is invalid or ambiguous
+ *   - the intent is ambiguous (e.g. category_breakdown with unknown kind)
+ *   - category-scoped query is requested (not yet supported)
+ *   - model output is invalid
  *   - any network / API error occurs
  *
  * All errors are logged and suppressed — the caller falls back to null.
@@ -190,7 +193,7 @@ export async function parseAnalyticsQueryWithAi(
   apiKey: string,
   model: string,
   logger: FastifyBaseLogger,
-): Promise<AnalyticsQueryType | null> {
+): Promise<AnalyticsQuery | null> {
   const requestBody: AiChatRequest = {
     model,
     messages: [
@@ -251,16 +254,16 @@ export async function parseAnalyticsQueryWithAi(
     return null;
   }
 
-  const queryType = mapToQueryType(aiResult);
+  const query = mapToAnalyticsQuery(aiResult);
 
-  if (queryType) {
+  if (query) {
     logger.info(
-      { queryType, period: aiResult.period, kind: aiResult.kind },
+      { queryType: query.type, period: query.period, kind: aiResult.kind },
       'AI analytics parser: intent extracted',
     );
   } else {
-    logger.info({ aiResult }, 'AI analytics parser: intent not mappable to supported query type');
+    logger.info({ aiResult }, 'AI analytics parser: intent not mappable to supported query');
   }
 
-  return queryType;
+  return query;
 }
