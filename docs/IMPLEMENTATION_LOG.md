@@ -917,3 +917,46 @@ interface AdminEvent {
 **Dependencies added:** none
 
 **Verification:** `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓
+
+---
+
+## 2026-03-25 — Timezone-Aware Analytics Period Semantics (apps/bot-api)
+
+**Task:** Remove the reliance on SQL `current_date` (server date) for analytics period boundaries so that "today", "yesterday", "this week", and "this month" resolve from the user's actual local date.
+
+**Result:** Period boundaries are now computed in TypeScript from the user's stored IANA timezone (`public.users.timezone`, present since v1 schema) and passed as explicit YYYY-MM-DD parameters to SQL queries. The DB trigger already used this column for `transaction_date_local` — analytics now uses the same source of truth.
+
+**Files affected:**
+- `apps/bot-api/src/telegram/analytics/period-resolver.ts` (new — `FALLBACK_TIMEZONE = 'Asia/Almaty'` matching DB column default; `DateRange = {gte, lt}` interface; `getLocalDate(timezone)` via `Intl.DateTimeFormat.formatToParts` with fallback chain on invalid timezone; `addDays`, `monthStart`, `nextMonthStart`, `isoWeekStart` private helpers — all arithmetic via UTC midnight; `resolvePeriodRange(period, timezone): DateRange` — exported, covers all 5 periods)
+- `apps/bot-api/src/telegram/analytics/analytics-repository.ts` (modified — added `getUserTimezone(db, userId): Promise<string>` reading `public.users.timezone` with fallback to `FALLBACK_TIMEZONE`; `queryPeriodTotal` and `queryCategoryBreakdownByPeriod` now accept `DateRange` instead of `AnalyticsPeriod`; SQL uses `${range.gte}::date` / `${range.lt}::date` parameters — no `current_date` in period-based queries; `queryMonthTotal` and `queryCategoryBreakdown` kept but superseded)
+- `apps/bot-api/src/telegram/analytics/handler.ts` (modified — calls `getUserTimezone` then `resolvePeriodRange` after query is determined, passes `range` to repository functions; one indexed DB lookup per analytics request)
+
+**Key behavior:**
+- User in `Asia/Almaty` (UTC+5) at 22:00 UTC asking "расходы сегодня" → local date is the next calendar day → correct
+- User in `America/New_York` (UTC-5) at 01:00 UTC asking "расходы вчера" → local date is still the previous day → correct
+- Invalid/missing timezone → fallback to `'Asia/Almaty'` (matches DB column default)
+- No schema changes — `timezone` column has existed since `20260322_001_init_schema.sql`
+
+**Dependencies added:** none (`Intl.DateTimeFormat` is built into Node.js 18+)
+
+**Verification:** `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓
+
+---
+
+## 2026-03-25 — Render Deploy Runbook and Closed Smoke Test Foundation (docs)
+
+**Task:** Add a deterministic deployment runbook for the first real Render production deploy and a closed smoke test checklist covering all implemented flows.
+
+**Result:** Two new operational docs in `docs/`. The runbook covers the full deploy sequence for bot-api and worker (admin-web deferred). The smoke test checklist is step-by-step with explicit DB assertions for each flow.
+
+**Files affected:**
+- `docs/DEPLOY_RUNBOOK.md` (new — Blueprint vs manual deploy options; secret inventory; deploy order with webhook registration; env var reference table for both services; rollback procedure; deferred items)
+- `docs/CLOSED_SMOKE_TEST.md` (new — 16-section checklist: infrastructure health, new user bootstrap, text/voice transaction intake, LLM fallback, transaction corrections, analytics period queries, budget commands, daily recommendation manual trigger, subscription expiry/paywall, worker lifecycle check; pass criteria; known gaps)
+
+**Key decisions:**
+- admin-web excluded from runbook (no Dockerfile, not in render.yaml)
+- BILLING_PROVIDER=stub documented as known gap; no charge occurs during smoke test
+- All DB assertions in smoke test use direct SQL — no assumption about admin-web being available
+- Smoke test section 14 (daily recommendation) uses a manual job INSERT to trigger the pipeline without waiting for the scheduler
+
+**Dependencies added:** none (docs only)

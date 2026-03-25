@@ -3,7 +3,9 @@ import type { AppEnv } from '@aqsha-ai/config';
 import type { DbPool } from '@aqsha-ai/database';
 import { matchAnalyticsQuery } from './query-matcher';
 import { parseAnalyticsQueryWithAi } from './ai-query-parser';
+import { resolvePeriodRange } from './period-resolver';
 import {
+  getUserTimezone,
   queryBalance,
   queryPeriodTotal,
   queryCategoryBreakdownByPeriod,
@@ -29,6 +31,10 @@ import {
  *
  * All financial values are computed by deterministic SQL queries.
  * The LLM is used only to extract intent — never to calculate values.
+ *
+ * Period boundaries are derived from the user's stored timezone, not from
+ * the server's current_date. This ensures "today" and "this week" match the
+ * user's local calendar day regardless of the server's timezone.
  */
 export async function handleAnalyticsQuery(
   text: string,
@@ -56,6 +62,15 @@ export async function handleAnalyticsQuery(
     return null;
   }
 
+  // ── Timezone-aware date range resolution ─────────────────────────────────────
+  // Resolve the date range from the user's stored timezone before executing any
+  // query. balance and recent_transactions are period-agnostic and do not use
+  // the range, but fetching the timezone here keeps the flow uniform.
+  const timezone = await getUserTimezone(db, userId);
+  const range = resolvePeriodRange(query.period, timezone);
+
+  logger.debug({ userId, timezone, range, period: query.period }, 'Analytics period resolved');
+
   try {
     switch (query.type) {
       case 'balance': {
@@ -64,22 +79,22 @@ export async function handleAnalyticsQuery(
       }
 
       case 'expense_total': {
-        const total = await queryPeriodTotal(db, userId, 'expense', query.period);
+        const total = await queryPeriodTotal(db, userId, 'expense', range);
         return formatPeriodTotal('expense', total, query.period);
       }
 
       case 'income_total': {
-        const total = await queryPeriodTotal(db, userId, 'income', query.period);
+        const total = await queryPeriodTotal(db, userId, 'income', range);
         return formatPeriodTotal('income', total, query.period);
       }
 
       case 'expense_categories': {
-        const rows = await queryCategoryBreakdownByPeriod(db, userId, 'expense', query.period);
+        const rows = await queryCategoryBreakdownByPeriod(db, userId, 'expense', range);
         return formatCategoryBreakdownByPeriod('expense', rows, query.period);
       }
 
       case 'income_categories': {
-        const rows = await queryCategoryBreakdownByPeriod(db, userId, 'income', query.period);
+        const rows = await queryCategoryBreakdownByPeriod(db, userId, 'income', range);
         return formatCategoryBreakdownByPeriod('income', rows, query.period);
       }
 

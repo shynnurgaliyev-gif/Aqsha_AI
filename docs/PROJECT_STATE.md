@@ -13,7 +13,7 @@
 
 ## Current Phase
 
-**Deterministic analytics period support expansion done. Real billing integration and admin-web Dockerfile remain.**
+**Deploy runbook and smoke test docs done. Real billing integration and admin-web Dockerfile remain.**
 
 The approved implementation order from CLAUDE.md:
 1. ~~Lock architecture~~ ✓
@@ -67,6 +67,8 @@ The approved implementation order from CLAUDE.md:
 | LLM transaction parsing foundation | ✓ accepted | `text-intake/ai-parser.ts` (new): OpenAI Chat Completions fallback; `response_format: json_object`, `temperature: 0`, `max_tokens: 150`; strict result validator (kind, positive-integer amount, non-empty category); `handler.ts`: two-stage parse (deterministic first → AI fallback); `env: AppEnv` param added; `voice-intake/handler.ts` + `update-router.ts` updated to pass `env`; no schema changes; typecheck ✓, build ✓ |
 | LLM analytics parsing foundation | ✓ accepted | `analytics/ai-query-parser.ts` (new): OpenAI Chat Completions fallback; extracts `{query_type, period, kind, category}`; strict validator + `mapToQueryType` maps to existing `AnalyticsQueryType` or null (unsupported period/category filter/ambiguous kind → safe null); `handler.ts`: two-stage flow (deterministic first → AI fallback), `env: AppEnv` param added; `update-router.ts` updated to pass `env`; all calculations remain deterministic SQL; no schema changes; typecheck ✓, build ✓ |
 | Deterministic analytics period support expansion | ✓ accepted | `query-matcher.ts`: added `AnalyticsPeriod` (today/yesterday/current_week/previous_month/current_month), `AnalyticsQuery = {type, period}` struct; renamed `expense_month`/`income_month` → `expense_total`/`income_total`; 20+ new deterministic tokens; `analytics-repository.ts`: `queryPeriodTotal` + `queryCategoryBreakdownByPeriod` with SQL for all 5 periods (ISO week / Monday start); `formatter.ts`: `formatPeriodTotal` + `formatCategoryBreakdownByPeriod` with period labels; `ai-query-parser.ts`: added yesterday, removed period restrictions, returns `AnalyticsQuery | null`; `handler.ts`: dispatches on `{type, period}`; no schema changes; typecheck ✓, build ✓ |
+| Timezone-aware analytics period semantics | ✓ accepted | `analytics/period-resolver.ts` (new): `FALLBACK_TIMEZONE='Asia/Almaty'`, `DateRange={gte,lt}`, `getLocalDate(timezone)` via `Intl.DateTimeFormat.formatToParts`, `resolvePeriodRange(period, timezone)` with pure date arithmetic (UTC midnight, ISO week); `analytics-repository.ts`: `getUserTimezone(db, userId)` reads `public.users.timezone`; `queryPeriodTotal` + `queryCategoryBreakdownByPeriod` now accept `DateRange` — SQL uses explicit `${range.gte}::date / ${range.lt}::date` params instead of `current_date`; `handler.ts`: fetches timezone + resolves range before switch; no schema changes (timezone column was already in v1 schema); typecheck ✓, build ✓ |
+| Render deploy runbook + closed smoke test | ✓ accepted | `docs/DEPLOY_RUNBOOK.md`: Blueprint/manual deploy options, secret inventory, deploy order, webhook registration, env var reference, rollback; `docs/CLOSED_SMOKE_TEST.md`: 16-section checklist with DB assertions covering all implemented flows; admin-web excluded (no Dockerfile yet) |
 
 ---
 
@@ -79,13 +81,11 @@ The approved implementation order from CLAUDE.md:
 
 ## Next Recommended Step
 
-Extend analytics to support category-scoped queries (e.g. "how much did I spend on food this month") — AI parser already extracts the category candidate and all period SQL is in place; only the category-filtered repository query and safe category resolution are missing.
-
-Or add a budget-alert worker job: proactively notify users when a category crosses 80% or 100% of its monthly limit (signals already computed in the daily recommendation flow).
-
-Or implement real billing / payment provider integration (replace stub with actual invoice/payment flow).
+Implement real billing / payment provider integration (replace stub with actual invoice/payment flow) — the product is paid but billing is still a stub; this blocks real users.
 
 Or add Dockerfile + render.yaml entry for admin-web (ADR-001 requires Docker deployment for all services).
+
+Or extend analytics to support category-scoped queries — AI parser already extracts the category candidate, `DateRange` is in place; only the category-filtered SQL and safe DB category resolution remain.
 
 ---
 
