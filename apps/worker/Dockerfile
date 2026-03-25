@@ -35,7 +35,7 @@ RUN pnpm --filter @aqsha-ai/shared   build \
 # - installs only prod deps (no devDeps)
 # - copies workspace packages (with their built dist/) into node_modules
 # - worker's own dist/ is NOT included; copied separately below
-RUN pnpm --filter @aqsha-ai/worker deploy /deploy
+RUN pnpm --filter @aqsha-ai/worker deploy --legacy /deploy
 
 # Copy the compiled app into the deployment bundle.
 RUN cp -r ./apps/worker/dist /deploy/dist

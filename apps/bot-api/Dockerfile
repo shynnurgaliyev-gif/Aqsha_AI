@@ -35,7 +35,7 @@ RUN pnpm --filter @aqsha-ai/shared   build \
 # - installs only prod deps (no devDeps)
 # - copies workspace packages (with their built dist/) into node_modules
 # - bot-api's own dist/ is NOT included; copied separately below
-RUN pnpm --filter @aqsha-ai/bot-api deploy /deploy
+RUN pnpm --filter @aqsha-ai/bot-api deploy --legacy /deploy
 
 # Copy the compiled app into the deployment bundle.
 RUN cp -r ./apps/bot-api/dist /deploy/dist
