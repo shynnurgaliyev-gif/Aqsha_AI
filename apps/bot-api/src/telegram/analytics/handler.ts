@@ -1,6 +1,8 @@
 import type { FastifyBaseLogger } from 'fastify';
+import type { AppEnv } from '@aqsha-ai/config';
 import type { DbPool } from '@aqsha-ai/database';
 import { matchAnalyticsQuery } from './query-matcher';
+import { parseAnalyticsQueryWithAi } from './ai-query-parser';
 import {
   queryBalance,
   queryMonthTotal,
@@ -17,26 +19,42 @@ import {
 /**
  * Attempts to handle a text message as a supported analytics query.
  *
- * Returns a formatted response string if the text matched a known query keyword.
- * Returns null if the text is not a recognized analytics query — caller must
- * fall through to the existing text intake handler.
+ * Flow:
+ *   Stage 1: cheap deterministic keyword matcher (no API cost).
+ *   Stage 2: AI fallback for broader natural-language queries (OpenAI API).
+ *   If both stages return null, caller falls through to text intake handler.
+ *
+ * Returns a formatted response string if a query matched.
+ * Returns null if the text is not a recognised analytics query.
  *
  * All financial values are computed by deterministic SQL queries.
- * No LLM is involved in any calculation.
+ * The LLM is used only to extract intent — never to calculate values.
  */
 export async function handleAnalyticsQuery(
   text: string,
   userId: string,
   db: DbPool,
+  env: AppEnv,
   logger: FastifyBaseLogger,
 ): Promise<string | null> {
-  const queryType = matchAnalyticsQuery(text);
+  // ── Stage 1: deterministic keyword match ─────────────────────────────────────
+  let queryType = matchAnalyticsQuery(text);
+
+  if (queryType) {
+    logger.info({ userId, queryType }, 'Analytics query matched (deterministic)');
+  }
+
+  // ── Stage 2: AI fallback ─────────────────────────────────────────────────────
+  if (!queryType) {
+    queryType = await parseAnalyticsQueryWithAi(text, env.OPENAI_API_KEY, env.OPENAI_MODEL, logger);
+    if (queryType) {
+      logger.info({ userId, queryType }, 'Analytics query matched via AI');
+    }
+  }
 
   if (!queryType) {
     return null;
   }
-
-  logger.info({ userId, queryType }, 'Analytics query matched');
 
   try {
     switch (queryType) {

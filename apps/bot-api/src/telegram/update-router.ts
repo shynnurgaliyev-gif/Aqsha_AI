@@ -57,7 +57,7 @@ export async function routeTelegramUpdate(
 
         // Analytics queries take priority over correction and text intake.
         // handleAnalyticsQuery returns null if the text is not a recognised query.
-        const analyticsResponse = await handleAnalyticsQuery(msg.text ?? '', userId, db, logger);
+        const analyticsResponse = await handleAnalyticsQuery(msg.text ?? '', userId, db, env, logger);
 
         if (analyticsResponse !== null) {
           logger.info({ updateId: update.update_id }, 'Analytics query handled');

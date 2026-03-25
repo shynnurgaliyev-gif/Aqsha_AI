@@ -13,7 +13,7 @@
 
 ## Current Phase
 
-**Admin-web access protection done. Real billing integration and admin-web Dockerfile remain.**
+**LLM analytics parsing foundation done. Real billing integration and admin-web Dockerfile remain.**
 
 The approved implementation order from CLAUDE.md:
 1. ~~Lock architecture~~ ✓
@@ -64,6 +64,8 @@ The approved implementation order from CLAUDE.md:
 | Monthly budget / category limit foundation | ✓ accepted | `supabase/migrations/20260324_002_add_monthly_budgets.sql`; `telegram/budgets/`: command-matcher, repository, formatter, handler; set/show/list commands; `monthly_budgets` table with unique constraint per user/category/month; DB trigger enforces expense-only; `update-router.ts` wired between analytics and correction; typecheck ✓, build ✓ |
 | Budget-aware daily recommendation expansion | ✓ accepted | `worker/src/daily-recommendations/repository.ts`: `BudgetStatusRow`, `loadUserBudgetStatuses` (current-month budgets with spending from confirmed+corrected transactions); `calculator.ts`: `BudgetSignal`, `BudgetSignalKind`, `selectBudgetSignals` (on_track/near_limit/over_budget at 80% threshold); `formatter.ts`: `budgetSignals` field on `RecommendationParams`, warning lines appended for near_limit+over_budget categories; `handlers/generate.ts`: loads budgets, computes signals, extends `payload_json.budgets`, passes signals to formatter; typecheck ✓, build ✓ |
 | Admin-web internal access protection | ✓ accepted | `src/middleware.ts`: HTTP Basic Auth gate; `ADMIN_SECRET` env var required; missing secret → 503; wrong/absent credentials → 401 + `WWW-Authenticate: Basic`; `/api/health` excluded via matcher (open for Render health checks); `_next/*` excluded; `.env.example` updated with `ADMIN_SECRET=`; typecheck ✓, build ✓ |
+| LLM transaction parsing foundation | ✓ accepted | `text-intake/ai-parser.ts` (new): OpenAI Chat Completions fallback; `response_format: json_object`, `temperature: 0`, `max_tokens: 150`; strict result validator (kind, positive-integer amount, non-empty category); `handler.ts`: two-stage parse (deterministic first → AI fallback); `env: AppEnv` param added; `voice-intake/handler.ts` + `update-router.ts` updated to pass `env`; no schema changes; typecheck ✓, build ✓ |
+| LLM analytics parsing foundation | ✓ accepted | `analytics/ai-query-parser.ts` (new): OpenAI Chat Completions fallback; extracts `{query_type, period, kind, category}`; strict validator + `mapToQueryType` maps to existing `AnalyticsQueryType` or null (unsupported period/category filter/ambiguous kind → safe null); `handler.ts`: two-stage flow (deterministic first → AI fallback), `env: AppEnv` param added; `update-router.ts` updated to pass `env`; all calculations remain deterministic SQL; no schema changes; typecheck ✓, build ✓ |
 
 ---
 
@@ -76,11 +78,13 @@ The approved implementation order from CLAUDE.md:
 
 ## Next Recommended Step
 
-Implement real billing / payment provider integration (replace stub with actual invoice/payment flow).
+Add a budget-alert worker job: proactively notify users when a category crosses 80% or 100% of its monthly limit (signals already computed in the daily recommendation flow).
+
+Or extend analytics query layer to support category-scoped queries (e.g. "how much did I spend on food this month") — AI parser already extracts the category candidate, but `mapToQueryType` returns null until the SQL layer supports it.
+
+Or implement real billing / payment provider integration (replace stub with actual invoice/payment flow).
 
 Or add Dockerfile + render.yaml entry for admin-web (ADR-001 requires Docker deployment for all services).
-
-Or add a budget-alert worker job: proactively notify users when a category crosses 80% or 100% of its monthly limit.
 
 ---
 

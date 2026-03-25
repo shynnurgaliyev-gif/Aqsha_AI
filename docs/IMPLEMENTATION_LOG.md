@@ -835,3 +835,56 @@ interface AdminEvent {
 **Dependencies added:** none
 
 **Verification:** `pnpm --filter @aqsha-ai/admin-web typecheck` ✓, `pnpm --filter @aqsha-ai/admin-web build` ✓ (middleware compiled, 32.9 kB)
+
+---
+
+## 2026-03-25 — LLM Transaction Parsing Foundation (apps/bot-api)
+
+**Task:** Add an AI fallback to the text intake flow so that broader natural-language expense/income messages (beyond the narrow deterministic parser) are understood.
+
+**Result:** Two-stage parser: Stage 1 is the existing deterministic regex parser (synchronous, zero API cost); Stage 2 is a new OpenAI Chat Completions fallback called only when Stage 1 returns null. Both stages feed the same category resolver, draft storage, and confirmation flow — no new DB tables, no new session keys, no schema changes.
+
+**Files affected:**
+- `apps/bot-api/src/telegram/text-intake/ai-parser.ts` (new — `parseWithAi(text, apiKey, model, logger): Promise<ParsedIntake | null>`; system prompt extracts kind/amount/category/note; `response_format: json_object`, `temperature: 0`, `max_tokens: 150`; `validateAiResult()` enforces: kind ∈ {expense, income}, amount = Math.floor > 0, category non-empty string; all errors logged and suppressed, never throw)
+- `apps/bot-api/src/telegram/text-intake/handler.ts` (modified — added `env: AppEnv` as 4th parameter; added AI fallback block after deterministic parse; `parsed` changed from `const` to `let`)
+- `apps/bot-api/src/telegram/voice-intake/handler.ts` (modified — pass `env` to `handleTextMessage` call)
+- `apps/bot-api/src/telegram/update-router.ts` (modified — pass `env` to `handleTextMessage` call)
+
+**Key behavior:**
+- Deterministic parser succeeds → AI never called; no latency, no cost
+- Deterministic parser fails → AI called; result validated before use
+- AI returns null (not a transaction or ambiguous) → `unsupported` response as before
+- AI extracts category candidate → still must resolve against DB via `resolveCategory`; auto-creation never happens
+- All writes (draft + confirmed transaction) remain behind explicit user confirmation
+- Network/API errors from OpenAI → null returned, graceful `unsupported` fallback
+- `rawText` stored as original user text in all cases
+
+**Dependencies added:** none (uses native `fetch`, same pattern as `transcriber.ts`)
+
+**Verification:** `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓
+
+---
+
+## 2026-03-25 — LLM Analytics Parsing Foundation (apps/bot-api)
+
+**Task:** Add an AI fallback to the analytics query handler so that broader natural-language finance questions (beyond the exact-match keyword table) are understood and routed to the correct deterministic SQL query.
+
+**Result:** Two-stage analytics flow: Stage 1 is the existing deterministic keyword matcher (zero API cost); Stage 2 is a new OpenAI Chat Completions fallback called only when Stage 1 returns null. The AI extracts a structured intent (`query_type`, `period`, `kind`, `category`) which is validated and mapped to an existing `AnalyticsQueryType`. All calculations remain deterministic SQL — the LLM is used only for intent extraction.
+
+**Files affected:**
+- `apps/bot-api/src/telegram/analytics/ai-query-parser.ts` (new — `parseAnalyticsQueryWithAi(text, apiKey, model, logger): Promise<AnalyticsQueryType | null>`; system prompt extracts analytics intent as structured JSON; `response_format: json_object`, `temperature: 0`, `max_tokens: 100`; `validateAiAnalyticsResult()` validates all fields; `mapToQueryType()` maps to existing query type or null for: unsupported periods, category-scoped queries, ambiguous kind; all errors suppressed, never throw)
+- `apps/bot-api/src/telegram/analytics/handler.ts` (modified — added `env: AppEnv` as 4th parameter; two-stage flow: deterministic first → AI fallback; SQL queries and formatters unchanged)
+- `apps/bot-api/src/telegram/update-router.ts` (modified — pass `env` to `handleAnalyticsQuery`)
+
+**Key behavior:**
+- Deterministic matcher succeeds → AI never called
+- Deterministic matcher fails → AI called; intent validated before use
+- Supported mapping: `balance` → balance; `expense_total/income_total` + `current_month|null` → monthly total; `category_breakdown` + known kind + `current_month|null` + no category → category breakdown; `recent_transactions` → recent list
+- Unsupported period (previous_month, current_week, today) → null → safe fallback
+- Category filter in query (e.g. "food spending") → null → safe fallback (category-scoped SQL not yet implemented)
+- Ambiguous kind for category_breakdown → null → safe fallback
+- No financial values computed from LLM output
+
+**Dependencies added:** none (uses native `fetch`)
+
+**Verification:** `pnpm --filter @aqsha-ai/bot-api typecheck` ✓, `pnpm --filter @aqsha-ai/bot-api build` ✓
