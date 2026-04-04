@@ -17,13 +17,9 @@ export function createApp(env: AppEnv, db: DbPool): FastifyInstance {
   });
 
   // ── Health ──────────────────────────────────────────────────────────────────
-  app.get('/health', async () => {
-    return {
-      status: 'ok',
-      service: env.APP_NAME,
-      env: env.NODE_ENV,
-    };
-  });
+  const healthResponse = { status: 'ok', service: env.APP_NAME, env: env.NODE_ENV };
+  app.get('/health', async () => healthResponse);
+  app.get('/', async () => healthResponse);       // Render pings root before /health
 
   // ── Telegram webhook ─────────────────────────────────────────────────────────
   void app.register(createWebhookRoute(env, db));

@@ -34,20 +34,16 @@ async function callTelegramApi(botToken: string, method: string, body: Record<st
     throw new Error(`Telegram ${method} network error: ${String(err)}`);
   }
 
-  if (!response.ok) {
-    throw new Error(`Telegram ${method} HTTP ${response.status}`);
-  }
-
   let data: TelegramApiResponse;
   try {
     data = (await response.json()) as TelegramApiResponse;
   } catch (err) {
-    throw new Error(`Telegram ${method} response parse error: ${String(err)}`);
+    throw new Error(`Telegram ${method} HTTP ${response.status} — response parse error: ${String(err)}`);
   }
 
-  if (!data.ok) {
+  if (!response.ok || !data.ok) {
     throw new Error(
-      `Telegram ${method} API error ${data.error_code ?? 'unknown'}: ${data.description ?? 'no description'}`,
+      `Telegram ${method} HTTP ${response.status} — ${data.error_code ?? 'unknown'}: ${data.description ?? 'no description'}`,
     );
   }
 }
