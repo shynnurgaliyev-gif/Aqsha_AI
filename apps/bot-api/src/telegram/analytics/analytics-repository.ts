@@ -4,6 +4,7 @@ import { FALLBACK_TIMEZONE, type DateRange } from './period-resolver';
 export interface CategoryTotalRow {
   categoryName: string;
   total: number;
+  count: number;
 }
 
 export interface RecentTransactionRow {
@@ -110,8 +111,8 @@ export async function queryCategoryBreakdown(
   userId: string,
   kind: 'expense' | 'income',
 ): Promise<CategoryTotalRow[]> {
-  const rows = await db<{ category_name: string; total: string }[]>`
-    SELECT c.name AS category_name, SUM(t.amount) AS total
+  const rows = await db<{ category_name: string; total: string; count: string }[]>`
+    SELECT c.name AS category_name, SUM(t.amount) AS total, COUNT(*) AS count
     FROM public.transactions t
     JOIN public.categories c ON c.id = t.category_id
     WHERE t.user_id = ${userId}
@@ -127,6 +128,7 @@ export async function queryCategoryBreakdown(
   return rows.map((r) => ({
     categoryName: r.category_name,
     total: Number(r.total),
+    count: Number(r.count),
   }));
 }
 
@@ -146,8 +148,8 @@ export async function queryCategoryBreakdownByPeriod(
   kind: 'expense' | 'income',
   range: DateRange,
 ): Promise<CategoryTotalRow[]> {
-  const rows = await db<{ category_name: string; total: string }[]>`
-    SELECT c.name AS category_name, SUM(t.amount) AS total
+  const rows = await db<{ category_name: string; total: string; count: string }[]>`
+    SELECT c.name AS category_name, SUM(t.amount) AS total, COUNT(*) AS count
     FROM public.transactions t
     JOIN public.categories c ON c.id = t.category_id
     WHERE t.user_id = ${userId}
@@ -163,6 +165,7 @@ export async function queryCategoryBreakdownByPeriod(
   return rows.map((r) => ({
     categoryName: r.category_name,
     total: Number(r.total),
+    count: Number(r.count),
   }));
 }
 

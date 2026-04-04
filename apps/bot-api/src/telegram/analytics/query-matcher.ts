@@ -47,8 +47,8 @@ const ANALYTICS_TOKENS = new Map<string, AnalyticsQuery>([
   ['balance', { type: 'balance', period: 'current_month' }],
 
   // ── Expense totals ────────────────────────────────────────────────────────
-  ['расходы за месяц', { type: 'expense_total', period: 'current_month' }],
-  ['расходы', { type: 'expense_total', period: 'current_month' }],
+  ['расходы за месяц', { type: 'expense_categories', period: 'current_month' }],
+  ['расходы', { type: 'expense_categories', period: 'current_month' }],
   ['расходы сегодня', { type: 'expense_total', period: 'today' }],
   ['расходы за сегодня', { type: 'expense_total', period: 'today' }],
   ['сегодняшние расходы', { type: 'expense_total', period: 'today' }],
@@ -62,8 +62,8 @@ const ANALYTICS_TOKENS = new Map<string, AnalyticsQuery>([
   ['расходы прошлого месяца', { type: 'expense_total', period: 'previous_month' }],
 
   // ── Income totals ─────────────────────────────────────────────────────────
-  ['доходы за месяц', { type: 'income_total', period: 'current_month' }],
-  ['доходы', { type: 'income_total', period: 'current_month' }],
+  ['доходы за месяц', { type: 'income_categories', period: 'current_month' }],
+  ['доходы', { type: 'income_categories', period: 'current_month' }],
   ['доходы сегодня', { type: 'income_total', period: 'today' }],
   ['доходы за сегодня', { type: 'income_total', period: 'today' }],
   ['доходы вчера', { type: 'income_total', period: 'yesterday' }],

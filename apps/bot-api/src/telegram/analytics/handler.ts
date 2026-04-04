@@ -89,12 +89,12 @@ export async function handleAnalyticsQuery(
 
       case 'expense_categories': {
         const rows = await queryCategoryBreakdownByPeriod(db, userId, 'expense', range);
-        return formatCategoryBreakdownByPeriod('expense', rows, query.period);
+        return formatCategoryBreakdownByPeriod('expense', rows, range);
       }
 
       case 'income_categories': {
         const rows = await queryCategoryBreakdownByPeriod(db, userId, 'income', range);
-        return formatCategoryBreakdownByPeriod('income', rows, query.period);
+        return formatCategoryBreakdownByPeriod('income', rows, range);
       }
 
       case 'recent_transactions': {

@@ -1,4 +1,5 @@
 import type { AnalyticsPeriod } from './query-matcher';
+import type { DateRange } from './period-resolver';
 import type { CategoryTotalRow, RecentTransactionRow } from './analytics-repository';
 
 function formatAmount(amount: number): string {
@@ -16,6 +17,23 @@ function periodLabel(period: AnalyticsPeriod): string {
   }
 }
 
+/** Converts YYYY-MM-DD → DD.MM */
+function fmtDateShort(dateStr: string): string {
+  return `${dateStr.slice(8, 10)}.${dateStr.slice(5, 7)}`;
+}
+
+/** Converts YYYY-MM-DD → DD.MM.YYYY */
+function fmtDateFull(dateStr: string): string {
+  return `${dateStr.slice(8, 10)}.${dateStr.slice(5, 7)}.${dateStr.slice(0, 4)}`;
+}
+
+/** Returns the last inclusive day (lt − 1 day) as YYYY-MM-DD. */
+function lastInclusiveDay(lt: string): string {
+  const d = new Date(`${lt}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
 export function formatBalance(balance: number): string {
   const sign = balance >= 0 ? '+' : '';
   return `Баланс: ${sign}${formatAmount(balance)}`;
@@ -31,19 +49,42 @@ export function formatPeriodTotal(
   return `${kindLabel} (${periodLabel(period)}): ${formatAmount(total)}`;
 }
 
-/** Period-aware category breakdown formatter. Covers all supported periods. */
+/** Category breakdown formatter with date range, totals, and percentages. */
 export function formatCategoryBreakdownByPeriod(
   kind: 'expense' | 'income',
   rows: CategoryTotalRow[],
-  period: AnalyticsPeriod,
+  range: DateRange,
 ): string {
+  const headerEmoji = kind === 'expense' ? '📊' : '📈';
   const kindLabel = kind === 'expense' ? 'Расходы' : 'Доходы';
-  const header = `${kindLabel} по категориям (${periodLabel(period)})`;
+  const totalEmoji = kind === 'expense' ? '💸' : '💰';
+  const totalLabel = kind === 'expense' ? 'Итого потрачено' : 'Итого получено';
+  const sectionLabel = kind === 'expense' ? 'По категориям' : 'По источникам';
+
+  const end = lastInclusiveDay(range.lt);
+  const header = `${headerEmoji} ${kindLabel} за ${fmtDateShort(range.gte)} — ${fmtDateFull(end)}:`;
+
   if (rows.length === 0) {
-    return `${header}:\nНет данных.`;
+    return `${header}\nНет данных за этот период.`;
   }
-  const lines = rows.map((r, i) => `${i + 1}. ${r.categoryName} — ${formatAmount(r.total)}`);
-  return `${header}:\n${lines.join('\n')}`;
+
+  const total = rows.reduce((sum, r) => sum + r.total, 0);
+  const count = rows.reduce((sum, r) => sum + r.count, 0);
+
+  const lines = rows.map((r) => {
+    const pct = total > 0 ? Math.round((r.total / total) * 100) : 0;
+    return `• ${r.categoryName}: ${formatAmount(r.total)} (${pct}%)`;
+  });
+
+  return [
+    header,
+    `${totalEmoji} ${totalLabel}: ${formatAmount(total)}`,
+    '',
+    `${sectionLabel}:`,
+    ...lines,
+    '',
+    `📝 Записей: ${count}`,
+  ].join('\n');
 }
 
 export function formatRecentTransactions(rows: RecentTransactionRow[]): string {
