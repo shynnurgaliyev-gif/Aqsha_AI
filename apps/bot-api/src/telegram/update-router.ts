@@ -11,6 +11,7 @@ import { handleCorrectionFlow } from './transaction-correction/correction-handle
 import { handleTextMessage } from './text-intake/handler';
 import { handleVoiceMessage } from './voice-intake/handler';
 import { handleAnalyticsQuery } from './analytics/handler';
+import { handleChat } from './chat/chat-handler';
 import { sendMessage } from './telegram-client';
 
 /**
@@ -41,6 +42,14 @@ export async function routeTelegramUpdate(
 
         // ── Billing commands (accessible to all users, including expired) ───────
         // Checked before the access gate so expired users can reach the billing stub.
+        // ── /start command ─────────────────────────────────────────────────────
+        // Treat /start as a greeting so the bot responds warmly, not with "unsupported".
+        if (msg.text?.trim() === '/start') {
+          const welcome = await handleChat('/start — пользователь только что открыл бота', env.OPENAI_API_KEY, env.OPENAI_MODEL, logger);
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: welcome }, logger);
+          break;
+        }
+
         if (matchBillingCommand(msg.text ?? '')) {
           logger.info({ updateId: update.update_id, userId }, 'Billing command received');
           const billingResponse = await handleBillingCommand(userId, currentPlanStatus, db, logger);
@@ -81,7 +90,14 @@ export async function routeTelegramUpdate(
             } else {
               const result = await handleTextMessage(msg, userId, db, env, logger);
               logger.info({ updateId: update.update_id, resultKind: result.kind }, 'Text message handled');
-              await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: result.message }, logger);
+
+              // When no financial intent was detected, use conversational AI instead
+              // of a hardcoded "I don't understand" message.
+              const responseText = result.kind === 'unsupported'
+                ? await handleChat(msg.text ?? '', env.OPENAI_API_KEY, env.OPENAI_MODEL, logger)
+                : result.message;
+
+              await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: responseText }, logger);
             }
           }
         }
