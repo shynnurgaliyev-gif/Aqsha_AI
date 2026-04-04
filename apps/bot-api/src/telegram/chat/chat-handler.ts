@@ -1,10 +1,12 @@
 import type { FastifyBaseLogger } from 'fastify';
+import type { ChatMessage } from './chat-session';
 
 /**
  * Conversational fallback handler.
  *
  * Called when no financial intent was detected (unsupported result from text intake).
  * Uses OpenAI to generate a friendly, context-aware response as Акша — the finance assistant.
+ * Accepts prior conversation history so replies stay contextually coherent.
  *
  * On any OpenAI failure, returns a safe hardcoded fallback so the bot always replies.
  */
@@ -30,6 +32,7 @@ const SYSTEM_PROMPT = `Ты Акша — дружелюбный AI-ассист�
 - Если спрашивают что ты умеешь — дай краткий список, не перечисляй всё
 - Если запрос явно финансовый но непонятный — покажи правильный формат
 - Не выдумывай данные о балансе или транзакциях пользователя — ты их не знаешь в этом контексте
+- Помни контекст разговора: если пользователь отвечает «да» или «нет» — это ответ на твой предыдущий вопрос
 - На темы не связанные с финансами — отвечай одной фразой и мягко возвращай к финансам
 - Никогда не говори что ты ChatGPT или называй модель`;
 
@@ -45,12 +48,21 @@ function randomFallback(): string {
   return FALLBACK_RESPONSES[Math.floor(Math.random() * FALLBACK_RESPONSES.length)] ?? DEFAULT_FALLBACK;
 }
 
+export interface ChatResult {
+  reply: string;
+  /** Updated history to persist: prior history + new user message + assistant reply. */
+  updatedHistory: ChatMessage[];
+}
+
 export async function handleChat(
   text: string,
+  history: ChatMessage[],
   apiKey: string,
   model: string,
   logger: FastifyBaseLogger,
-): Promise<string> {
+): Promise<ChatResult> {
+  const newUserMessage: ChatMessage = { role: 'user', content: text };
+
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -62,7 +74,8 @@ export async function handleChat(
         model,
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: text },
+          ...history,
+          newUserMessage,
         ],
         max_tokens: 200,
         temperature: 0.75,
@@ -71,7 +84,7 @@ export async function handleChat(
 
     if (!response.ok) {
       logger.warn({ status: response.status }, 'Chat handler: OpenAI error, using fallback');
-      return randomFallback();
+      return { reply: randomFallback(), updatedHistory: history };
     }
 
     const data = (await response.json()) as {
@@ -81,12 +94,16 @@ export async function handleChat(
     const content = data.choices?.[0]?.message?.content?.trim();
     if (!content) {
       logger.warn('Chat handler: empty OpenAI response, using fallback');
-      return randomFallback();
+      return { reply: randomFallback(), updatedHistory: history };
     }
 
-    return content;
+    const assistantMessage: ChatMessage = { role: 'assistant', content };
+    return {
+      reply: content,
+      updatedHistory: [...history, newUserMessage, assistantMessage],
+    };
   } catch (err) {
     logger.warn({ err }, 'Chat handler: unexpected error, using fallback');
-    return randomFallback();
+    return { reply: randomFallback(), updatedHistory: history };
   }
 }

@@ -12,6 +12,7 @@ import { handleTextMessage, CONFIRMATION_KEYBOARD } from './text-intake/handler'
 import { handleVoiceMessage } from './voice-intake/handler';
 import { handleAnalyticsQuery } from './analytics/handler';
 import { handleChat } from './chat/chat-handler';
+import { getChatHistory, setChatHistory } from './chat/chat-session';
 import { sendMessage, answerCallbackQuery } from './telegram-client';
 import { getPendingDraft, clearPendingDraft } from './text-intake/session-draft';
 import { insertConfirmedTransaction } from './text-intake/transaction-inserter';
@@ -47,7 +48,7 @@ export async function routeTelegramUpdate(
         // ── /start command ─────────────────────────────────────────────────────
         // Treat /start as a greeting so the bot responds warmly, not with "unsupported".
         if (msg.text?.trim() === '/start') {
-          const welcome = await handleChat('/start — пользователь только что открыл бота', env.OPENAI_API_KEY, env.OPENAI_MODEL, logger);
+          const { reply: welcome } = await handleChat('/start — пользователь только что открыл бота', [], env.OPENAI_API_KEY, env.OPENAI_MODEL, logger);
           await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: welcome }, logger);
           break;
         }
@@ -96,7 +97,9 @@ export async function routeTelegramUpdate(
               // When no financial intent was detected, use conversational AI instead
               // of a hardcoded "I don't understand" message.
               if (result.kind === 'unsupported') {
-                const chatReply = await handleChat(msg.text ?? '', env.OPENAI_API_KEY, env.OPENAI_MODEL, logger);
+                const history = await getChatHistory(db, userId);
+                const { reply: chatReply, updatedHistory } = await handleChat(msg.text ?? '', history, env.OPENAI_API_KEY, env.OPENAI_MODEL, logger);
+                await setChatHistory(db, userId, updatedHistory);
                 await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: chatReply }, logger);
               } else if (result.kind === 'confirmation_prompt') {
                 await sendMessage(env.TELEGRAM_BOT_TOKEN, {
