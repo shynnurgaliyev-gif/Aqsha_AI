@@ -1,13 +1,15 @@
 import type { FastifyBaseLogger } from 'fastify';
 import type { DbPool } from '@aqsha-ai/database';
 import { matchBudgetCommand } from './budget-command-matcher';
-import { upsertMonthlyBudget, getBudgetStatus, getAllBudgetStatuses } from './budget-repository';
+import { upsertMonthlyBudget, getBudgetStatus, getAllBudgetStatuses, deleteMonthlyBudget } from './budget-repository';
 import {
   formatBudgetSet,
   formatBudgetStatus,
   formatAllBudgetStatuses,
+  formatBudgetDeleted,
   BUDGET_CATEGORY_NOT_FOUND,
   BUDGET_NOT_FOUND,
+  BUDGET_DELETE_NOT_FOUND,
 } from './budget-formatter';
 import { resolveCategory } from '../text-intake/category-resolver';
 
@@ -64,6 +66,26 @@ export async function handleBudgetCommand(
 
     logger.info({ userId, categoryId: category.id }, 'Budget status shown');
     return formatBudgetStatus(status);
+  }
+
+  // ── delete_budget ────────────────────────────────────────────────────────────
+  if (command.type === 'delete_budget') {
+    const category = await resolveCategory(db, userId, 'expense', command.categoryCandidate);
+
+    if (!category) {
+      logger.info({ userId, candidate: command.categoryCandidate }, 'Budget delete: expense category not found');
+      return BUDGET_CATEGORY_NOT_FOUND;
+    }
+
+    const deleted = await deleteMonthlyBudget(db, userId, category.id);
+
+    if (!deleted) {
+      logger.info({ userId, categoryId: category.id }, 'Budget delete: no budget found for this month');
+      return BUDGET_DELETE_NOT_FOUND;
+    }
+
+    logger.info({ userId, categoryId: category.id }, 'Budget deleted');
+    return formatBudgetDeleted(category.name, new Date().toISOString().slice(0, 7));
   }
 
   // ── set_budget ──────────────────────────────────────────────────────────────

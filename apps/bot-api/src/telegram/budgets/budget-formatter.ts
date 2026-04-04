@@ -65,6 +65,14 @@ export function formatBudgetAlert(row: BudgetStatusRow): string {
   );
 }
 
+/** Shown after a budget is successfully deleted. */
+export function formatBudgetDeleted(categoryName: string, yearMonth: string): string {
+  return `✓ Лимит по «${categoryName}» на ${yearMonth} удалён.`;
+}
+
+/** Shown when trying to delete a budget that doesn't exist for this month. */
+export const BUDGET_DELETE_NOT_FOUND = 'Лимит для этой категории на текущий месяц не установлен.';
+
 /** Shown when the category name could not be resolved to an expense category. */
 export const BUDGET_CATEGORY_NOT_FOUND = 'Категория расходов не найдена. Проверьте название.';
 

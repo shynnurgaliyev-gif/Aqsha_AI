@@ -97,6 +97,25 @@ export async function getBudgetStatus(
 }
 
 /**
+ * Deletes the monthly budget for a user/category in the current month.
+ * Returns true if a row was deleted, false if no budget existed.
+ */
+export async function deleteMonthlyBudget(
+  db: DbPool,
+  userId: string,
+  categoryId: string,
+): Promise<boolean> {
+  const result = await db<{ id: string }[]>`
+    DELETE FROM public.monthly_budgets
+    WHERE user_id     = ${userId}
+      AND category_id = ${categoryId}
+      AND year_month  = to_char(current_date, 'YYYY-MM')
+    RETURNING id
+  `;
+  return result.length > 0;
+}
+
+/**
  * Returns all budgets for the current month with spending totals.
  * Sorted alphabetically by category name.
  */

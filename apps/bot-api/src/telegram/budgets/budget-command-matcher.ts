@@ -25,7 +25,12 @@ export interface ListBudgetsCommand {
   type: 'list_budgets';
 }
 
-export type BudgetCommand = SetBudgetCommand | ShowBudgetCommand | ListBudgetsCommand;
+export interface DeleteBudgetCommand {
+  type: 'delete_budget';
+  categoryCandidate: string;
+}
+
+export type BudgetCommand = SetBudgetCommand | ShowBudgetCommand | ListBudgetsCommand | DeleteBudgetCommand;
 
 /**
  * Exact tokens for listing all current-month budgets.
@@ -52,6 +57,18 @@ const SET_PATTERNS: RegExp[] = [
   /^бюджет\s+(.+)\s+(\d+)$/,
   /^установи\s+(?:бюджет|лимит)\s+(.+)\s+(\d+)$/,
   /^set\s+budget\s+(.+)\s+(\d+)$/,
+];
+
+/**
+ * Regex patterns for deleting a budget.
+ * Checked before show patterns to avoid "удали лимит еда" matching show.
+ */
+const DELETE_PATTERNS: RegExp[] = [
+  /^удали\s+(?:бюджет|лимит)\s+(.+)$/,
+  /^удалить\s+(?:бюджет|лимит)\s+(.+)$/,
+  /^убери\s+(?:бюджет|лимит)\s+(.+)$/,
+  /^убрать\s+(?:бюджет|лимит)\s+(.+)$/,
+  /^delete\s+budget\s+(.+)$/,
 ];
 
 /**
@@ -91,6 +108,13 @@ export function matchBudgetCommand(text: string): BudgetCommand | null {
       if (amount > 0) {
         return { type: 'set_budget', categoryCandidate: m[1].trim(), amount };
       }
+    }
+  }
+
+  for (const pattern of DELETE_PATTERNS) {
+    const m = t.match(pattern);
+    if (m && m[1]) {
+      return { type: 'delete_budget', categoryCandidate: m[1].trim() };
     }
   }
 
