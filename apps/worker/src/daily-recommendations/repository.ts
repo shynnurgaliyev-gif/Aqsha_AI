@@ -275,6 +275,37 @@ export async function loadUserBudgetStatuses(
   });
 }
 
+export interface TopExpenseCategoryRow {
+  categoryName: string;
+  total: number;
+}
+
+/**
+ * Returns current-month expense totals per category, sorted by total descending.
+ * Used to identify the biggest spending category regardless of budget settings.
+ * Capped at 5 rows.
+ */
+export async function loadTopExpenseCategories(
+  db: DbPool,
+  userId: string,
+  timezone: string,
+): Promise<TopExpenseCategoryRow[]> {
+  const rows = await db<{ category_name: string; total: string }[]>`
+    SELECT c.name AS category_name, SUM(t.amount) AS total
+    FROM public.transactions t
+    JOIN public.categories c ON c.id = t.category_id
+    WHERE t.user_id      = ${userId}::uuid
+      AND t.kind         = 'expense'
+      AND t.is_deleted   = false
+      AND t.parse_status IN ('confirmed', 'corrected')
+      AND to_char(t.transaction_date_local, 'YYYY-MM') = to_char((now() AT TIME ZONE ${timezone})::date, 'YYYY-MM')
+    GROUP BY c.name
+    ORDER BY total DESC
+    LIMIT 5
+  `;
+  return rows.map((r) => ({ categoryName: r.category_name, total: Number(r.total) }));
+}
+
 /**
  * Enqueues a daily_recommendation_deliver job for the given recommendation.
  * Called immediately after a new recommendation row is created.

@@ -1,6 +1,7 @@
 import type { BudgetSignal } from './calculator';
+import type { TopExpenseCategoryRow } from './repository';
 
-function formatAmount(amount: number): string {
+function fmt(amount: number): string {
   return amount.toLocaleString('ru-RU') + ' ₸';
 }
 
@@ -11,36 +12,53 @@ export interface RecommendationParams {
   safeDailySpend: number;
   daysRemaining: number;
   budgetSignals?: BudgetSignal[];
+  topExpenseCategories?: TopExpenseCategoryRow[];
 }
 
 /**
- * Formats a compact plain-text daily recommendation message.
- * Appends budget warnings for near-limit and over-budget categories when present.
+ * Formats a personalized daily recommendation message.
+ *
+ * Structure:
+ *   Доброе утро! ☀️
+ *   До конца месяца у вас осталось X ₸.
+ *   Это около X ₸ в день.
+ *   [category insight — over-budget / near-limit / top spender]
  */
 export function formatRecommendationMessage(params: RecommendationParams): string {
-  const balanceSign = params.balance >= 0 ? '+' : '';
-  const lines = [
-    'Ваш ежедневный отчёт:',
-    `Баланс: ${balanceSign}${formatAmount(params.balance)}`,
-    `Расходы за месяц: ${formatAmount(params.monthExpenses)}`,
-    `Доходы за месяц: ${formatAmount(params.monthIncome)}`,
-    `Рекомендуемый дневной расход: ${formatAmount(params.safeDailySpend)} (осталось дней: ${params.daysRemaining})`,
-  ];
+  const lines: string[] = [];
 
-  const warnings = (params.budgetSignals ?? []).filter(
-    (s) => s.kind === 'near_limit' || s.kind === 'over_budget',
-  );
+  lines.push('Доброе утро! ☀️');
+  lines.push('');
 
-  if (warnings.length > 0) {
+  // ── Balance / daily spend ─────────────────────────────────────────────────
+  if (params.balance <= 0) {
+    lines.push('Баланс на нуле или в минусе. Постарайтесь не тратить лишнего.');
+  } else {
+    lines.push(`До конца месяца у вас осталось ${fmt(params.balance)}.`);
+    lines.push(`Это около ${fmt(params.safeDailySpend)} в день.`);
+  }
+
+  // ── Category insight ──────────────────────────────────────────────────────
+  const signals = params.budgetSignals ?? [];
+  const overBudget = signals.filter((s) => s.kind === 'over_budget');
+  const nearLimit  = signals.filter((s) => s.kind === 'near_limit');
+  const top        = params.topExpenseCategories ?? [];
+
+  if (overBudget.length > 0) {
+    // Sort by overrun amount (most over first)
+    const worst = overBudget.sort((a, b) => a.remaining - b.remaining)[0]!;
     lines.push('');
-    lines.push('Лимиты:');
-    for (const w of warnings) {
-      if (w.kind === 'over_budget') {
-        lines.push(`Перерасход: ${w.categoryName} (-${formatAmount(Math.abs(w.remaining))})`);
-      } else {
-        lines.push(`Близко к лимиту: ${w.categoryName} (остаток ${formatAmount(w.remaining)})`);
-      }
-    }
+    lines.push(`Основной перерасход — в категории «${worst.categoryName}».`);
+    lines.push('Если немного снизить эту категорию, будет легче удержаться в лимите.');
+  } else if (nearLimit.length > 0) {
+    const closest = nearLimit.sort((a, b) => a.remaining - b.remaining)[0]!;
+    lines.push('');
+    lines.push(`Категория «${closest.categoryName}» приближается к лимиту — осталось ${fmt(closest.remaining)}.`);
+    lines.push('Стоит немного притормозить в этой категории.');
+  } else if (top.length > 0) {
+    const biggest = top[0]!;
+    lines.push('');
+    lines.push(`Больше всего в этом месяце потрачено на «${biggest.categoryName}» — ${fmt(biggest.total)}.`);
   }
 
   return lines.join('\n');

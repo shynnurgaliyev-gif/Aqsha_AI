@@ -3,6 +3,7 @@ import {
   findUser,
   calculateDailyStats,
   loadUserBudgetStatuses,
+  loadTopExpenseCategories,
   insertRecommendationIfNew,
   enqueueDeliveryJob,
 } from '../repository';
@@ -63,6 +64,9 @@ export const dailyRecommendationGenerateHandler: JobHandler = async (job, ctx) =
   const budgets = await loadUserBudgetStatuses(db, userId, user.timezone);
   const budgetSignals = selectBudgetSignals(budgets);
 
+  // ── 3c. Load top expense categories (for insight when no budgets set) ──────
+  const topExpenseCategories = await loadTopExpenseCategories(db, userId, user.timezone);
+
   // ── 4. Format message ─────────────────────────────────────────────────────
   const messageText = formatRecommendationMessage({
     balance: stats.balance,
@@ -71,6 +75,7 @@ export const dailyRecommendationGenerateHandler: JobHandler = async (job, ctx) =
     safeDailySpend,
     daysRemaining,
     budgetSignals,
+    topExpenseCategories,
   });
 
   const payloadJson: Record<string, unknown> = {
