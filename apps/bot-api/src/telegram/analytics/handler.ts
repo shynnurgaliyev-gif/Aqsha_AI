@@ -3,7 +3,7 @@ import type { AppEnv } from '@aqsha-ai/config';
 import type { DbPool } from '@aqsha-ai/database';
 import { matchAnalyticsQuery } from './query-matcher';
 import { parseAnalyticsQueryWithAi } from './ai-query-parser';
-import { resolvePeriodRange } from './period-resolver';
+import { resolvePeriodRange, getLocalDate } from './period-resolver';
 import {
   getUserTimezone,
   queryBalance,
@@ -17,6 +17,20 @@ import {
   formatCategoryBreakdownByPeriod,
   formatRecentTransactions,
 } from './formatter';
+import type { DateRange } from './period-resolver';
+
+/**
+ * Caps the display range's upper bound to tomorrow (exclusive) in the user's
+ * local timezone, so the displayed end date shows today rather than the last
+ * day of the month when the month is still in progress.
+ */
+function capRangeToToday(range: DateRange, timezone: string): DateRange {
+  const today = getLocalDate(timezone);
+  const d = new Date(`${today}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  const tomorrow = d.toISOString().slice(0, 10);
+  return { gte: range.gte, lt: range.lt > tomorrow ? tomorrow : range.lt };
+}
 
 /**
  * Attempts to handle a text message as a supported analytics query.
@@ -89,12 +103,14 @@ export async function handleAnalyticsQuery(
 
       case 'expense_categories': {
         const rows = await queryCategoryBreakdownByPeriod(db, userId, 'expense', range);
-        return formatCategoryBreakdownByPeriod('expense', rows, range);
+        const displayRange = capRangeToToday(range, timezone);
+        return formatCategoryBreakdownByPeriod('expense', rows, displayRange);
       }
 
       case 'income_categories': {
         const rows = await queryCategoryBreakdownByPeriod(db, userId, 'income', range);
-        return formatCategoryBreakdownByPeriod('income', rows, range);
+        const displayRange = capRangeToToday(range, timezone);
+        return formatCategoryBreakdownByPeriod('income', rows, displayRange);
       }
 
       case 'recent_transactions': {

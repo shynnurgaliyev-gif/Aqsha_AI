@@ -26,7 +26,7 @@ export interface DateRange {
  * Falls back to FALLBACK_TIMEZONE if the provided timezone is invalid,
  * then to UTC as a last resort (should never be needed in practice).
  */
-function getLocalDate(timezone: string): string {
+export function getLocalDate(timezone: string): string {
   try {
     const now = new Date();
     const parts = new Intl.DateTimeFormat('en-US', {
