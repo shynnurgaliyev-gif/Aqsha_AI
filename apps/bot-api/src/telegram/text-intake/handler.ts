@@ -76,6 +76,8 @@ export async function handleTextMessage(
       return {
         kind: 'transaction_saved',
         message: `${savedEmoji} ${savedLabel}!\n💵 Сумма: ${fmt(pendingDraft.amount)} ₸\n📁 Категория: ${pendingDraft.categoryName}`,
+        savedCategoryId: pendingDraft.categoryId,
+        savedKind: pendingDraft.kind,
       };
     }
 

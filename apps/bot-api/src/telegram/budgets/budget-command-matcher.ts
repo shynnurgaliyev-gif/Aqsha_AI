@@ -50,6 +50,7 @@ const LIST_TOKENS = new Set([
 const SET_PATTERNS: RegExp[] = [
   /^лимит\s+(.+)\s+(\d+)$/,
   /^бюджет\s+(.+)\s+(\d+)$/,
+  /^установи\s+(?:бюджет|лимит)\s+(.+)\s+(\d+)$/,
   /^set\s+budget\s+(.+)\s+(\d+)$/,
 ];
 

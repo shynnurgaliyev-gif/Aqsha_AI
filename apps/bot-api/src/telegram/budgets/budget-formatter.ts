@@ -53,6 +53,18 @@ export function formatAllBudgetStatuses(rows: BudgetStatusRow[]): string {
   return `Бюджеты на ${yearMonth}:\n${lines.join('\n')}`;
 }
 
+/**
+ * Warning message sent as a separate follow-up when a confirmed expense
+ * causes the monthly budget to be exceeded.
+ */
+export function formatBudgetAlert(row: BudgetStatusRow): string {
+  const over = formatAmount(Math.abs(row.remaining));
+  return (
+    `⚠️ Лимит по «${row.categoryName}» превышен!\n` +
+    `Лимит: ${formatAmount(row.budgetAmount)} | Потрачено: ${formatAmount(row.spent)} | Перерасход: ${over}`
+  );
+}
+
 /** Shown when the category name could not be resolved to an expense category. */
 export const BUDGET_CATEGORY_NOT_FOUND = 'Категория расходов не найдена. Проверьте название.';
 

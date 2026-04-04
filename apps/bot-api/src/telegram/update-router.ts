@@ -16,6 +16,8 @@ import { getChatHistory, setChatHistory } from './chat/chat-session';
 import { sendMessage, answerCallbackQuery } from './telegram-client';
 import { getPendingDraft, clearPendingDraft } from './text-intake/session-draft';
 import { insertConfirmedTransaction } from './text-intake/transaction-inserter';
+import { getBudgetStatus } from './budgets/budget-repository';
+import { formatBudgetAlert } from './budgets/budget-formatter';
 
 /**
  * Routes an incoming Telegram update to the appropriate handler stub.
@@ -77,7 +79,14 @@ export async function routeTelegramUpdate(
         } else {
           // Budget commands: set / show / list monthly category budgets.
           // Returns null if the text is not a recognised budget command.
-          const budgetResponse = await handleBudgetCommand(msg.text ?? '', userId, db, logger);
+          let budgetResponse: string | null = null;
+          try {
+            budgetResponse = await handleBudgetCommand(msg.text ?? '', userId, db, logger);
+          } catch (err) {
+            logger.error({ err, updateId: update.update_id }, 'Budget command error');
+            await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: 'Не удалось выполнить команду. Попробуйте позже.' }, logger);
+            break;
+          }
 
           if (budgetResponse !== null) {
             logger.info({ updateId: update.update_id }, 'Budget command handled');
@@ -107,6 +116,18 @@ export async function routeTelegramUpdate(
                   text: result.message,
                   reply_markup: CONFIRMATION_KEYBOARD,
                 }, logger);
+              } else if (result.kind === 'transaction_saved') {
+                await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: result.message }, logger);
+                if (result.savedKind === 'expense') {
+                  try {
+                    const budgetStatus = await getBudgetStatus(db, userId, result.savedCategoryId);
+                    if (budgetStatus && budgetStatus.remaining < 0) {
+                      await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: formatBudgetAlert(budgetStatus) }, logger);
+                    }
+                  } catch (err) {
+                    logger.warn({ err }, 'Budget alert check failed — skipping');
+                  }
+                }
               } else {
                 await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: result.message }, logger);
               }
@@ -187,6 +208,16 @@ export async function routeTelegramUpdate(
               chatId,
               text: `${savedEmoji} ${savedLabel}!\n💵 Сумма: ${amountFmt} ₸\n📁 Категория: ${draft.categoryName}`,
             }, logger);
+            if (draft.kind === 'expense') {
+              try {
+                const budgetStatus = await getBudgetStatus(db, userId, draft.categoryId);
+                if (budgetStatus && budgetStatus.remaining < 0) {
+                  await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: formatBudgetAlert(budgetStatus) }, logger);
+                }
+              } catch (err) {
+                logger.warn({ err }, 'Budget alert check failed — skipping');
+              }
+            }
           } else {
             await clearPendingDraft(db, userId);
             logger.info({ updateId: update.update_id, userId }, 'Transaction cancelled via inline button');

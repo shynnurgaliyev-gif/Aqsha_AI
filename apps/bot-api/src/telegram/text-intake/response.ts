@@ -9,7 +9,7 @@ import type { PendingTransactionDraft } from './session-draft';
  */
 export type IntakeResult =
   | { kind: 'confirmation_prompt'; message: string; draft: PendingTransactionDraft }
-  | { kind: 'transaction_saved'; message: string }
+  | { kind: 'transaction_saved'; message: string; savedCategoryId: string; savedKind: 'expense' | 'income' }
   | { kind: 'cancelled'; message: string }
   | { kind: 'category_not_found'; message: string; candidate: string }
   | { kind: 'unsupported'; message: string };
