@@ -1,170 +1,57 @@
-\# TASK\_PROTOCOL
+# TASK_PROTOCOL
 
+## Workflow
 
+```
+Read context → Plan → Implement → QA → Document
+```
 
-Before doing any implementation work on this project, follow these rules strictly.
+### 1. Read context
+Before non-trivial work: read `CLAUDE.md` and `docs/PROJECT_STATE.md`.
+Understand what's already built. Avoid duplicating or contradicting prior decisions.
 
+### 2. Plan
+For any task touching more than 2 files: write a brief plan before changing code.
+Plan = approach, files to change, risks. Keep it short.
 
+### 3. Implement
+- Stay inside requested scope; flag scope creep explicitly before expanding
+- Follow domain rules from CLAUDE.md (money, SQL migrations, security)
+- Prefer simple, explicit, typed code over clever abstractions
+- Flag unexpected findings (design issues, bugs, risks) as you encounter them
 
-\## 1. Read project memory first
+### 4. QA — mandatory after every implementation
+Spawn qa-agent to validate the result:
 
-Always read these files before making meaningful changes:
+```
+Agent tool → subagent_type: "qa-agent"
+Prompt: "Verify [what was changed]. Changed files: [list]. Run typecheck + build for
+affected packages. Review logic for [specific concerns if any]."
+```
 
+If QA returns FAIL → address all reported issues → re-spawn QA.
+Task is complete only when QA returns PASS.
 
+### 5. Document
+After the task is accepted:
+- Update `docs/PROJECT_STATE.md` (completed work table + next step)
+- Add entry to `docs/IMPLEMENTATION_LOG.md` (one entry per task)
+- Update `docs/ARCHITECTURE_DECISIONS.md` only if a real architectural decision was made
 
-\- TASK\_PROTOCOL.md
+---
 
-\- CLAUDE.md
+## Conflict Resolution Priority
 
-\- docs/PROJECT\_STATE.md
+1. Domain rules in `CLAUDE.md` (money, DB, security)
+2. User's explicit request
+3. Existing architectural decisions (`docs/ARCHITECTURE_DECISIONS.md`)
+4. Agent judgment
 
-\- docs/ARCHITECTURE\_DECISIONS.md
+---
 
-\- docs/IMPLEMENTATION\_LOG.md
+## Documentation Rules
 
-
-
-Treat them as the project source of truth.
-
-
-
-\## 2. Respect existing architecture
-
-Do not ignore previously accepted decisions.
-
-Do not invent a new architecture if the project memory already defines the direction.
-
-Do not silently replace approved stack or structure.
-
-
-
-\## 3. Before changing code
-
-You must:
-
-\- inspect the current repository structure
-
-\- understand the exact task scope
-
-\- check for conflicts with accepted decisions
-
-\- make a brief implementation plan first
-
-
-
-\## 4. During implementation
-
-You must:
-
-\- stay strictly inside scope
-
-\- avoid unrelated refactors
-
-\- avoid architecture changes without explicit approval
-
-\- avoid database schema changes outside SQL migrations
-
-\- avoid changing previously accepted behavior silently
-
-
-
-\## 5. After implementation
-
-You must:
-
-\- show exact changed files
-
-\- explain what was changed
-
-\- provide a short verification summary
-
-\- stop after the requested task
-
-\- not continue automatically into the next task
-
-
-
-\## 6. Project memory update rule
-
-If the task result is completed and accepted, update the relevant memory files:
-
-
-
-\- docs/PROJECT\_STATE.md
-
-\- docs/ARCHITECTURE\_DECISIONS.md (only if a real architecture decision was made)
-
-\- docs/IMPLEMENTATION\_LOG.md
-
-
-
-\## 7. Memory update constraints
-
-Memory updates must be:
-
-\- short
-
-\- factual
-
-\- structured
-
-
-
-Do not:
-
-\- invent completed work
-
-\- mark anything as accepted unless it was actually accepted
-
-\- casually rewrite history
-
-\- remove important earlier decisions without explicit approval
-
-
-
-\## 8. Priority rule
-
-If there is any conflict:
-
-1\. TASK\_PROTOCOL.md
-
-2\. CLAUDE.md
-
-3\. docs/PROJECT\_STATE.md
-
-4\. docs/ARCHITECTURE\_DECISIONS.md
-
-5\. docs/IMPLEMENTATION\_LOG.md
-
-
-
-\## 9. Working style
-
-Use a controlled engineering approach.
-
-Prefer correctness over creativity.
-
-Protect consistency.
-
-Stay within the approved system.
-
-
-
-\## 10. PROJECT\_STATE freshness rule
-
-After every accepted task, docs/PROJECT\_STATE.md must be updated.
-
-"Next Recommended Step" must always reflect the actual next approved implementation step — not a stale or speculative one.
-
-Do not leave "Next Recommended Step" pointing to work that was already completed.
-
-
-
-\## 11. IMPLEMENTATION\_LOG archiving rule
-
-When docs/IMPLEMENTATION\_LOG.md becomes too large to read comfortably, older accepted entries must be moved to docs/archive/IMPLEMENTATION\_LOG\_archive\_NNN.md.
-
-Do not delete project history — archive it.
-
-Do not archive entries that have not been accepted and verified.
-
+- `IMPLEMENTATION_LOG.md` entries: short, factual, structured. One per accepted task.
+- Archive `IMPLEMENTATION_LOG.md` when it becomes too large to read comfortably
+  → move older entries to `docs/archive/IMPLEMENTATION_LOG_archive_NNN.md`
+- Do not mark work as accepted unless it passed QA and was confirmed by the user.

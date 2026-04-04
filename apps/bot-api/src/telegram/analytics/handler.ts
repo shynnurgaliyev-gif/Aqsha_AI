@@ -62,16 +62,15 @@ export async function handleAnalyticsQuery(
     return null;
   }
 
-  // ── Timezone-aware date range resolution ─────────────────────────────────────
-  // Resolve the date range from the user's stored timezone before executing any
-  // query. balance and recent_transactions are period-agnostic and do not use
-  // the range, but fetching the timezone here keeps the flow uniform.
-  const timezone = await getUserTimezone(db, userId);
-  const range = resolvePeriodRange(query.period, timezone);
-
-  logger.debug({ userId, timezone, range, period: query.period }, 'Analytics period resolved');
-
   try {
+    // ── Timezone-aware date range resolution ───────────────────────────────────
+    // Resolve the date range from the user's stored timezone before executing any
+    // query. balance and recent_transactions are period-agnostic and do not use
+    // the range, but fetching the timezone here keeps the flow uniform.
+    const timezone = await getUserTimezone(db, userId);
+    const range = resolvePeriodRange(query.period, timezone);
+
+    logger.debug({ userId, timezone, range, period: query.period }, 'Analytics period resolved');
     switch (query.type) {
       case 'balance': {
         const balance = await queryBalance(db, userId);

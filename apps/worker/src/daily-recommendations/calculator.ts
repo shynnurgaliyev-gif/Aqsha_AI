@@ -22,7 +22,12 @@ export interface BudgetSignal {
   remaining: number;
 }
 
-/** Threshold at which a budget is considered near its limit (80% spent). */
+/**
+ * Threshold at which a budget is considered near its limit (80% spent).
+ * The ratio is a float, but both operands (spent, budgetAmount) are always
+ * integers — safe as long as money storage remains integer. If amounts ever
+ * change to float, replace with integer comparison: spent * 100 >= budgetAmount * 80.
+ */
 const NEAR_LIMIT_RATIO = 0.8;
 
 /**

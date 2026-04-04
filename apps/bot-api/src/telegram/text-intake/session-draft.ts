@@ -46,7 +46,7 @@ export async function setPendingDraft(
   await db`
     UPDATE user_sessions
     SET
-      context_json         = context_json || ${db.json({ pendingTransaction: draft } as any)},
+      context_json         = (context_json - 'pendingDelete' - 'pendingCorrection') || ${db.json({ pendingTransaction: draft } as any)},
       session_status       = 'awaiting_confirmation',
       last_user_message_at = now()
     WHERE user_id = ${userId}
