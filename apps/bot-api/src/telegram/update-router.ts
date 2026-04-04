@@ -8,11 +8,13 @@ import { matchBillingCommand } from './billing/billing-command-matcher';
 import { handleBillingCommand } from './billing/billing-service';
 import { handleBudgetCommand } from './budgets/budget-handler';
 import { handleCorrectionFlow } from './transaction-correction/correction-handler';
-import { handleTextMessage } from './text-intake/handler';
+import { handleTextMessage, CONFIRMATION_KEYBOARD } from './text-intake/handler';
 import { handleVoiceMessage } from './voice-intake/handler';
 import { handleAnalyticsQuery } from './analytics/handler';
 import { handleChat } from './chat/chat-handler';
-import { sendMessage } from './telegram-client';
+import { sendMessage, answerCallbackQuery } from './telegram-client';
+import { getPendingDraft, clearPendingDraft } from './text-intake/session-draft';
+import { insertConfirmedTransaction } from './text-intake/transaction-inserter';
 
 /**
  * Routes an incoming Telegram update to the appropriate handler stub.
@@ -93,11 +95,18 @@ export async function routeTelegramUpdate(
 
               // When no financial intent was detected, use conversational AI instead
               // of a hardcoded "I don't understand" message.
-              const responseText = result.kind === 'unsupported'
-                ? await handleChat(msg.text ?? '', env.OPENAI_API_KEY, env.OPENAI_MODEL, logger)
-                : result.message;
-
-              await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: responseText }, logger);
+              if (result.kind === 'unsupported') {
+                const chatReply = await handleChat(msg.text ?? '', env.OPENAI_API_KEY, env.OPENAI_MODEL, logger);
+                await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: chatReply }, logger);
+              } else if (result.kind === 'confirmation_prompt') {
+                await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+                  chatId: msg.chat.id,
+                  text: result.message,
+                  reply_markup: CONFIRMATION_KEYBOARD,
+                }, logger);
+              } else {
+                await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: result.message }, logger);
+              }
             }
           }
         }
@@ -126,19 +135,56 @@ export async function routeTelegramUpdate(
     }
 
     case 'callback_query': {
-      const from = update.callback_query?.from;
-      if (from && !from.is_bot) {
-        const { currentPlanStatus } = await bootstrapUser(db, env, from);
+      const callbackQuery = update.callback_query;
+      const from = callbackQuery?.from;
+      const chatId = callbackQuery?.message?.chat.id;
 
-        // ── Access gate ────────────────────────────────────────────────────────
+      if (callbackQuery && from && !from.is_bot && chatId) {
+        const { userId, currentPlanStatus } = await bootstrapUser(db, env, from);
+
+        // Always answer the callback query to dismiss the button spinner.
+        await answerCallbackQuery(env.TELEGRAM_BOT_TOKEN, callbackQuery.id, logger);
+
+        // ── Access gate ──────────────────────────────────────────────────────
         if (checkSubscriptionAccess(currentPlanStatus) === 'blocked') {
           logger.info({ updateId: update.update_id, planStatus: currentPlanStatus }, 'Access blocked — callback query not processed');
-          // No reply for callback_query: handler not yet implemented; paywall applied silently.
           break;
         }
+
+        const data = callbackQuery.data;
+
+        if (data === 'confirm' || data === 'cancel') {
+          const draft = await getPendingDraft(db, userId);
+
+          if (!draft) {
+            // Draft expired or was already handled.
+            await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+              chatId,
+              text: '⏱ Время подтверждения истекло. Отправь транзакцию заново.',
+            }, logger);
+            break;
+          }
+
+          if (data === 'confirm') {
+            await insertConfirmedTransaction(db, userId, draft);
+            await clearPendingDraft(db, userId);
+            logger.info({ updateId: update.update_id, userId, amount: draft.amount }, 'Transaction confirmed via inline button');
+            const savedEmoji = draft.kind === 'expense' ? '📤' : '📥';
+            const savedLabel = draft.kind === 'expense' ? 'Расход записан' : 'Доход записан';
+            const amountFmt = draft.amount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0');
+            await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+              chatId,
+              text: `${savedEmoji} ${savedLabel}!\n💵 Сумма: ${amountFmt} ₸\n📁 Категория: ${draft.categoryName}`,
+            }, logger);
+          } else {
+            await clearPendingDraft(db, userId);
+            logger.info({ updateId: update.update_id, userId }, 'Transaction cancelled via inline button');
+            await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: '❌ Отменено.' }, logger);
+          }
+        } else {
+          logger.info({ updateId: update.update_id, data }, 'Unknown callback_query data — ignored');
+        }
       }
-      logger.info({ updateId: update.update_id }, 'Callback query received — handler not yet implemented');
-      // TODO: await handleCallbackQuery(update, db, env, logger);
       break;
     }
 

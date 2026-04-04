@@ -1,8 +1,18 @@
 import type { FastifyBaseLogger } from 'fastify';
 
+export interface InlineKeyboardButton {
+  text: string;
+  callback_data: string;
+}
+
+export interface InlineKeyboardMarkup {
+  inline_keyboard: InlineKeyboardButton[][];
+}
+
 export interface SendMessageParams {
   chatId: number;
   text: string;
+  reply_markup?: InlineKeyboardMarkup;
 }
 
 /**
@@ -31,6 +41,7 @@ export async function sendMessage(
       body: JSON.stringify({
         chat_id: params.chatId,
         text: params.text,
+        ...(params.reply_markup ? { reply_markup: params.reply_markup } : {}),
       }),
     });
   } catch (err) {
@@ -56,5 +67,34 @@ export async function sendMessage(
       { chatId: params.chatId, errorCode: body.error_code, description: body.description },
       'Telegram sendMessage API error',
     );
+  }
+}
+
+/**
+ * Answers a callback query to dismiss the loading indicator on the inline button.
+ * Must be called within 10 seconds of receiving the callback_query update.
+ * Errors are logged and suppressed — same pattern as sendMessage.
+ */
+export async function answerCallbackQuery(
+  botToken: string,
+  callbackQueryId: string,
+  logger: FastifyBaseLogger,
+): Promise<void> {
+  const url = `https://api.telegram.org/bot${botToken}/answerCallbackQuery`;
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ callback_query_id: callbackQueryId }),
+    });
+  } catch (err) {
+    logger.error({ err, callbackQueryId }, 'Telegram answerCallbackQuery network error');
+    return;
+  }
+
+  if (!response.ok) {
+    logger.error({ callbackQueryId, status: response.status }, 'Telegram answerCallbackQuery HTTP error');
   }
 }

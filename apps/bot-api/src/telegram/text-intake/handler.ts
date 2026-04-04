@@ -9,6 +9,18 @@ import { getPendingDraft, setPendingDraft, clearPendingDraft } from './session-d
 import { insertConfirmedTransaction } from './transaction-inserter';
 import type { IntakeResult } from './response';
 
+/** Formats a number with space as thousands separator: 14500 → "14 500" */
+function fmt(amount: number): string {
+  return amount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0');
+}
+
+export const CONFIRMATION_KEYBOARD = {
+  inline_keyboard: [[
+    { text: '✅ Да', callback_data: 'confirm' },
+    { text: '❌ Отмена', callback_data: 'cancel' },
+  ]],
+};
+
 const CONFIRMATION_TOKENS = new Set(['да', 'yes', 'подтвердить', 'confirm', 'ok', 'ок', '+']);
 const CANCELLATION_TOKENS = new Set(['нет', 'no', 'отмена', 'cancel', 'отменить', '-']);
 
@@ -59,17 +71,18 @@ export async function handleTextMessage(
       await insertConfirmedTransaction(db, userId, pendingDraft);
       await clearPendingDraft(db, userId);
       logger.info({ userId, amount: pendingDraft.amount, kind: pendingDraft.kind }, 'Transaction confirmed and saved');
-      const kindLabel = pendingDraft.kind === 'expense' ? 'Расход' : 'Доход';
+      const savedEmoji = pendingDraft.kind === 'expense' ? '📤' : '📥';
+      const savedLabel = pendingDraft.kind === 'expense' ? 'Расход записан' : 'Доход записан';
       return {
         kind: 'transaction_saved',
-        message: `✓ ${kindLabel} ${pendingDraft.amount} — ${pendingDraft.categoryName} сохранён.`,
+        message: `${savedEmoji} ${savedLabel}!\n💵 Сумма: ${fmt(pendingDraft.amount)} ₸\n📁 Категория: ${pendingDraft.categoryName}`,
       };
     }
 
     if (isCancellation(text)) {
       await clearPendingDraft(db, userId);
       logger.info({ userId }, 'Transaction draft cancelled');
-      return { kind: 'cancelled', message: 'Отменено.' };
+      return { kind: 'cancelled', message: '❌ Отменено.' };
     }
 
     // Not a confirmation or cancellation — fall through to treat as new intake.
@@ -118,10 +131,11 @@ export async function handleTextMessage(
 
   logger.info({ userId, kind: parsed.kind, amount: parsed.amount, category: category.name }, 'Transaction draft created');
 
-  const kindLabel = parsed.kind === 'expense' ? 'Расход' : 'Доход';
+  const confirmEmoji = parsed.kind === 'expense' ? '📤' : '📥';
+  const confirmLabel = parsed.kind === 'expense' ? 'Расход' : 'Доход';
   return {
     kind: 'confirmation_prompt',
-    message: `${kindLabel} ${parsed.amount} — ${category.name}. Подтвердить? (да / нет)`,
+    message: `${confirmEmoji} Подтверждаешь?\n💵 Сумма: ${fmt(parsed.amount)} ₸\n📁 Категория: ${category.name}\n🔖 Тип: ${confirmLabel}`,
     draft,
   };
 }
