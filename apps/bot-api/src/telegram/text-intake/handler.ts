@@ -91,14 +91,30 @@ export async function handleTextMessage(
 
   // ── B. New intake path ───────────────────────────────────────────────────────
   // Stage 1: cheap deterministic parser.
-  // Stage 2: AI fallback for broader natural-language input.
+  // Stage 2: AI fallback for broader natural-language input, or category remapping
+  //          when deterministic parse succeeded but the extracted category is unknown.
   // If both fail, return a safe unsupported response — no draft is created.
   let parsed = parseIntakeText(text);
+  let category = parsed
+    ? await resolveCategory(db, userId, parsed.kind, parsed.categoryCandidate)
+    : null;
 
+  // If deterministic parse found a transaction but the category is unknown,
+  // let the AI remap it to a canonical category (e.g. "депозит" → "Прочее").
+  if (parsed && !category) {
+    logger.info({ userId, candidate: parsed.categoryCandidate }, 'Text intake: category not found, retrying with AI');
+    parsed = await parseWithAi(text, env.OPENAI_API_KEY, env.OPENAI_MODEL, logger);
+    category = parsed
+      ? await resolveCategory(db, userId, parsed.kind, parsed.categoryCandidate)
+      : null;
+  }
+
+  // If deterministic parse returned nothing, try AI parse from scratch.
   if (!parsed) {
     parsed = await parseWithAi(text, env.OPENAI_API_KEY, env.OPENAI_MODEL, logger);
     if (parsed) {
       logger.info({ userId, kind: parsed.kind, amount: parsed.amount }, 'Text intake: AI parse used');
+      category = await resolveCategory(db, userId, parsed.kind, parsed.categoryCandidate);
     }
   }
 
@@ -108,8 +124,6 @@ export async function handleTextMessage(
       message: 'Не понял. Попробуйте: «Расход 2500 Еда» или «Доход 50000 Зарплата».',
     };
   }
-
-  const category = await resolveCategory(db, userId, parsed.kind, parsed.categoryCandidate);
 
   if (!category) {
     return {
