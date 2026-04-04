@@ -132,7 +132,15 @@ export async function routeTelegramUpdate(
 
         const result = await handleVoiceMessage(msg, userId, db, env, logger);
         logger.info({ updateId: update.update_id, resultKind: result.kind }, 'Voice message handled');
-        await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: result.message }, logger);
+        if (result.kind === 'confirmation_prompt') {
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+            chatId: msg.chat.id,
+            text: result.message,
+            reply_markup: CONFIRMATION_KEYBOARD,
+          }, logger);
+        } else {
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: result.message }, logger);
+        }
       }
       break;
     }
