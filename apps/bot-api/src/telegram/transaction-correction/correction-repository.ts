@@ -131,6 +131,79 @@ export async function updateTransactionCategory(
 }
 
 /**
+ * Returns the user's IANA timezone string. Falls back to 'UTC' if not set.
+ */
+export async function getUserTimezone(db: DbPool, userId: string): Promise<string> {
+  const rows = await db<{ timezone: string }[]>`
+    SELECT COALESCE(NULLIF(timezone, ''), 'UTC') AS timezone
+      FROM public.users
+     WHERE id = ${userId}
+  `;
+  return rows[0]?.timezone ?? 'UTC';
+}
+
+export interface BulkDeletePreview {
+  count: number;
+  totalAmount: number;
+}
+
+/**
+ * Counts and sums transactions matching the bulk-delete criteria without modifying them.
+ * Includes both 'confirmed' and 'corrected' transactions.
+ */
+export async function previewBulkDelete(
+  db: DbPool,
+  userId: string,
+  dateFrom: string,
+  dateTo: string,
+  kind?: 'expense' | 'income',
+): Promise<BulkDeletePreview> {
+  const rows = await db<{ count: string; total_amount: string }[]>`
+    SELECT COUNT(*)                    AS count,
+           COALESCE(SUM(amount), 0)   AS total_amount
+      FROM public.transactions
+     WHERE user_id    = ${userId}
+       AND is_deleted = false
+       AND parse_status IN ('confirmed', 'corrected')
+       AND transaction_date_local >= ${dateFrom}::date
+       AND transaction_date_local <= ${dateTo}::date
+       ${kind !== undefined ? db`AND kind = ${kind}` : db``}
+  `;
+  const row = rows[0];
+  return {
+    count:       Number(row?.count ?? 0),
+    totalAmount: Number(row?.total_amount ?? 0),
+  };
+}
+
+/**
+ * Soft-deletes all transactions matching the bulk-delete criteria.
+ * Returns the number of rows actually deleted.
+ */
+export async function executeBulkDelete(
+  db: DbPool,
+  userId: string,
+  dateFrom: string,
+  dateTo: string,
+  kind?: 'expense' | 'income',
+): Promise<number> {
+  const result = await db<{ id: string }[]>`
+    UPDATE public.transactions
+       SET is_deleted   = true,
+           deleted_at   = now(),
+           parse_status = 'deleted'
+     WHERE user_id    = ${userId}
+       AND is_deleted = false
+       AND parse_status IN ('confirmed', 'corrected')
+       AND transaction_date_local >= ${dateFrom}::date
+       AND transaction_date_local <= ${dateTo}::date
+       ${kind !== undefined ? db`AND kind = ${kind}` : db``}
+    RETURNING id
+  `;
+  return result.length;
+}
+
+/**
  * Returns the 5 most recent confirmed non-deleted transactions for the user.
  * Used in the correction context to show actionable entries.
  */

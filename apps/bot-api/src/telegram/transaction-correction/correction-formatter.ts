@@ -1,6 +1,7 @@
 import type { CorrectionTransactionRow } from './correction-repository';
 import type { PendingDeleteState } from './correction-session';
 import type { PendingCorrectionState } from './correction-edit-session';
+import type { PendingBulkDeleteState } from './correction-bulk-delete-session';
 
 function formatAmount(amount: number): string {
   return amount.toLocaleString('ru-RU') + ' ₸';
@@ -116,3 +117,42 @@ export const CORRECTION_FAILED = 'Операция не найдена или у
 
 /** Shown when the category name could not be resolved. */
 export const CORRECTION_CATEGORY_NOT_FOUND = 'Категория не найдена. Проверьте название.';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bulk delete formatters
+// ─────────────────────────────────────────────────────────────────────────────
+
+function kindSuffix(kind?: 'expense' | 'income'): string {
+  if (kind === 'expense') return ' (расходы)';
+  if (kind === 'income')  return ' (доходы)';
+  return '';
+}
+
+/**
+ * Confirmation prompt before bulk deletion is executed.
+ */
+export function formatBulkDeletePrompt(state: PendingBulkDeleteState): string {
+  return (
+    `Удалить ${state.count} операций${kindSuffix(state.kind)} ${state.periodLabel} ` +
+    `на сумму ${formatAmount(state.totalAmount)}?\n\n` +
+    `Подтвердить: да / нет`
+  );
+}
+
+/**
+ * Success message after bulk deletion is executed.
+ * count is the number of rows actually deleted (may differ from preview
+ * due to concurrent changes).
+ */
+export function formatBulkDeleteSuccess(state: PendingBulkDeleteState, deletedCount: number): string {
+  return `✓ Удалено ${deletedCount} операций${kindSuffix(state.kind)} ${state.periodLabel}.`;
+}
+
+/** Shown when no matching transactions were found for the requested period. */
+export const BULK_DELETE_NOTHING_FOUND = 'Операций за этот период не найдено.';
+
+/** Shown when the user sends non-да/нет text while a bulk delete is pending. */
+export const BULK_DELETE_AWAITING = 'Ожидаю подтверждения удаления. Ответьте: да или нет.';
+
+/** Shown when the user cancels a pending bulk delete. */
+export const BULK_DELETE_CANCELLED = 'Удаление отменено.';

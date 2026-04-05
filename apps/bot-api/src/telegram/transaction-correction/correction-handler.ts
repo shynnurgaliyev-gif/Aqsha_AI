@@ -3,12 +3,16 @@ import type { DbPool } from '@aqsha-ai/database';
 import { matchCorrectionCommand } from './correction-command-matcher';
 import { matchAmountCorrection } from './correction-amount-matcher';
 import { matchCategoryCorrection } from './correction-category-matcher';
+import { matchBulkDeleteCommand, getDateBounds, getPeriodLabel } from './correction-bulk-delete-matcher';
 import {
   findLastTransaction,
   softDeleteTransaction,
   queryRecentForCorrection,
   updateTransactionAmount,
   updateTransactionCategory,
+  getUserTimezone,
+  previewBulkDelete,
+  executeBulkDelete,
 } from './correction-repository';
 import { getPendingDelete, setPendingDelete, clearPendingDelete } from './correction-session';
 import {
@@ -16,6 +20,11 @@ import {
   setPendingCorrection,
   clearPendingCorrection,
 } from './correction-edit-session';
+import {
+  getPendingBulkDelete,
+  setPendingBulkDelete,
+  clearPendingBulkDelete,
+} from './correction-bulk-delete-session';
 import { resolveCategory } from '../text-intake/category-resolver';
 import {
   formatRecentForCorrection,
@@ -24,6 +33,8 @@ import {
   formatCorrectionAmountPrompt,
   formatCorrectionCategoryPrompt,
   formatCorrectionSuccess,
+  formatBulkDeletePrompt,
+  formatBulkDeleteSuccess,
   DELETE_CANCELLED,
   DELETE_AWAITING,
   DELETE_NOT_FOUND,
@@ -33,6 +44,9 @@ import {
   CORRECTION_NO_TRANSACTION,
   CORRECTION_FAILED,
   CORRECTION_CATEGORY_NOT_FOUND,
+  BULK_DELETE_NOTHING_FOUND,
+  BULK_DELETE_AWAITING,
+  BULK_DELETE_CANCELLED,
 } from './correction-formatter';
 
 const CONFIRMATION_TOKENS = new Set(['да', 'yes', 'подтвердить', 'confirm', 'ok', 'ок', '+']);
@@ -52,6 +66,10 @@ const CANCELLATION_TOKENS = new Set(['нет', 'no', 'отмена', 'cancel', '
  *        - anything else      → remind user to confirm or cancel (state held)
  *   2. If 'pendingDelete' is present in session context:
  *        - confirmation token → soft-delete, clear state, success/fail message
+ *        - cancellation token → clear state, cancel message
+ *        - anything else      → remind user to confirm or cancel (state held)
+ *   2b. If 'pendingBulkDelete' is present in session context:
+ *        - confirmation token → bulk soft-delete by date range, clear state, success message
  *        - cancellation token → clear state, cancel message
  *        - anything else      → remind user to confirm or cancel (state held)
  *   3. If a correction command is matched:
@@ -152,6 +170,37 @@ export async function handleCorrectionFlow(
     return DELETE_AWAITING;
   }
 
+  // ── 2b. Pending bulk-delete confirmation ─────────────────────────────────────
+  const pendingBulkDelete = await getPendingBulkDelete(db, userId);
+
+  if (pendingBulkDelete) {
+    if (CONFIRMATION_TOKENS.has(normalized)) {
+      const deleted = await executeBulkDelete(
+        db, userId,
+        pendingBulkDelete.dateFrom,
+        pendingBulkDelete.dateTo,
+        pendingBulkDelete.kind,
+      );
+      await clearPendingBulkDelete(db, userId);
+
+      if (deleted === 0) {
+        logger.warn({ userId, period: pendingBulkDelete.period }, 'Bulk delete: no rows affected — already deleted or concurrent change');
+        return 'Операции уже удалены или не найдены.';
+      }
+
+      logger.info({ userId, deleted, period: pendingBulkDelete.period }, 'Bulk delete executed');
+      return formatBulkDeleteSuccess(pendingBulkDelete, deleted);
+    }
+
+    if (CANCELLATION_TOKENS.has(normalized)) {
+      await clearPendingBulkDelete(db, userId);
+      logger.info({ userId }, 'Bulk delete cancelled by user');
+      return BULK_DELETE_CANCELLED;
+    }
+
+    return BULK_DELETE_AWAITING;
+  }
+
   // ── 3. Correction commands ───────────────────────────────────────────────────
   const commandType = matchCorrectionCommand(normalized);
 
@@ -178,6 +227,36 @@ export async function handleCorrectionFlow(
 
     logger.info({ userId, transactionId: last.id }, 'Pending delete set');
     return formatDeletePrompt(last);
+  }
+
+  // ── 3b. Bulk delete command ───────────────────────────────────────────────────
+  const bulkDeleteCmd = matchBulkDeleteCommand(normalized);
+
+  if (bulkDeleteCmd) {
+    const timezone = await getUserTimezone(db, userId);
+    const { from, to } = getDateBounds(bulkDeleteCmd.period, timezone);
+    const periodLabel = getPeriodLabel(bulkDeleteCmd.period);
+
+    const preview = await previewBulkDelete(db, userId, from, to, bulkDeleteCmd.kind);
+
+    if (preview.count === 0) {
+      logger.info({ userId, period: bulkDeleteCmd.period }, 'Bulk delete: nothing found for period');
+      return BULK_DELETE_NOTHING_FOUND;
+    }
+
+    const state = {
+      period:      bulkDeleteCmd.period,
+      kind:        bulkDeleteCmd.kind,
+      count:       preview.count,
+      totalAmount: preview.totalAmount,
+      dateFrom:    from,
+      dateTo:      to,
+      periodLabel,
+    };
+
+    await setPendingBulkDelete(db, userId, state);
+    logger.info({ userId, count: preview.count, period: bulkDeleteCmd.period }, 'Pending bulk delete set');
+    return formatBulkDeletePrompt(state);
   }
 
   // ── 4. Amount correction command ─────────────────────────────────────────────
