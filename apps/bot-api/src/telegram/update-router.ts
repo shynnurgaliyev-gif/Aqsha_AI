@@ -148,6 +148,7 @@ export async function routeTelegramUpdate(
                 await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: result.message }, logger);
               }
             }
+            }
           }
         }
       }
