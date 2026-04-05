@@ -6,7 +6,7 @@ export interface ChatMessage {
 }
 
 /** Maximum number of messages kept in history (user + assistant pairs). */
-const MAX_HISTORY = 8;
+const MAX_HISTORY = 5;
 
 /**
  * Reads the chat history from the session context.
