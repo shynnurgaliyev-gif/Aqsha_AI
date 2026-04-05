@@ -133,9 +133,8 @@ function kindSuffix(kind?: 'expense' | 'income'): string {
  */
 export function formatBulkDeletePrompt(state: PendingBulkDeleteState): string {
   return (
-    `Удалить ${state.count} операций${kindSuffix(state.kind)} ${state.periodLabel} ` +
-    `на сумму ${formatAmount(state.totalAmount)}?\n\n` +
-    `Подтвердить: да / нет`
+    `🗑 Удалить ${state.count} операций${kindSuffix(state.kind)} ${state.periodLabel} ` +
+    `на сумму ${formatAmount(state.totalAmount)}?`
   );
 }
 

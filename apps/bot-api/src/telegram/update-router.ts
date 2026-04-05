@@ -11,7 +11,7 @@ import { handleGoalCommand } from './goals/goal-handler';
 import { handleRecurringCommand } from './recurring/recurring-handler';
 import { findRecurringExpenseById, insertTransactionFromRecurring } from './recurring/recurring-repository';
 import { formatRecurringConfirmed } from './recurring/recurring-formatter';
-import { handleCorrectionFlow } from './transaction-correction/correction-handler';
+import { handleCorrectionFlow, handleBulkDeleteCallback } from './transaction-correction/correction-handler';
 import { handleTextMessage, CONFIRMATION_KEYBOARD } from './text-intake/handler';
 import { handleVoiceMessage } from './voice-intake/handler';
 import { handleAnalyticsQuery } from './analytics/handler';
@@ -132,7 +132,15 @@ export async function routeTelegramUpdate(
 
             if (correctionResponse !== null) {
               logger.info({ updateId: update.update_id }, 'Correction flow handled');
-              await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: correctionResponse }, logger);
+              if (typeof correctionResponse === 'string') {
+                await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: correctionResponse }, logger);
+              } else {
+                await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+                  chatId: msg.chat.id,
+                  text: correctionResponse.message,
+                  reply_markup: correctionResponse.reply_markup,
+                }, logger);
+              }
             } else {
               const result = await handleTextMessage(msg, userId, db, env, logger);
               logger.info({ updateId: update.update_id, resultKind: result.kind }, 'Text message handled');
@@ -259,6 +267,10 @@ export async function routeTelegramUpdate(
             logger.info({ updateId: update.update_id, userId }, 'Transaction cancelled via inline button');
             await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: '❌ Отменено.' }, logger);
           }
+        } else if (data === 'bulk_yes' || data === 'bulk_no') {
+          const action = data === 'bulk_yes' ? 'yes' : 'no';
+          const bulkResult = await handleBulkDeleteCallback(action, userId, db, logger);
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: bulkResult }, logger);
         } else if (data?.startsWith('rec_yes:') || data?.startsWith('rec_no:')) {
           // Recurring expense reminder confirmation.
           const recurringId = data.split(':')[1];

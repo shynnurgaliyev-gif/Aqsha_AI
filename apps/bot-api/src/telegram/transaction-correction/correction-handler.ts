@@ -54,6 +54,22 @@ const CONFIRMATION_TOKENS = new Set(['да', 'yes', 'подтвердить', 'c
 const CANCELLATION_TOKENS = new Set(['нет', 'no', 'отмена', 'cancel', 'отменить', '-']);
 
 /**
+ * A correction flow result that includes an inline keyboard.
+ * The router sends this as a message with reply_markup instead of plain text.
+ */
+export interface CorrectionWithKeyboard {
+  message: string;
+  reply_markup: { inline_keyboard: Array<Array<{ text: string; callback_data: string }>> };
+}
+
+export const BULK_DELETE_KEYBOARD: CorrectionWithKeyboard['reply_markup'] = {
+  inline_keyboard: [[
+    { text: '✅ Да, удалить', callback_data: 'bulk_yes' },
+    { text: '❌ Отмена',      callback_data: 'bulk_no'  },
+  ]],
+};
+
+/**
  * Handles transaction correction commands, pending delete confirmation,
  * and pending correction (amount / category) confirmation.
  *
@@ -91,7 +107,7 @@ export async function handleCorrectionFlow(
   userId: string,
   db: DbPool,
   logger: FastifyBaseLogger,
-): Promise<string | null> {
+): Promise<string | CorrectionWithKeyboard | null> {
   const normalized = text.toLowerCase().trim();
 
   // ── 1. Pending correction confirmation ──────────────────────────────────────
@@ -259,7 +275,7 @@ export async function handleCorrectionFlow(
 
     await setPendingBulkDelete(db, userId, state);
     logger.info({ userId, count: preview.count, period: bulkDeleteCmd.period }, 'Pending bulk delete set');
-    return formatBulkDeletePrompt(state);
+    return { message: formatBulkDeletePrompt(state), reply_markup: BULK_DELETE_KEYBOARD };
   }
 
   // ── 4. Amount correction command ─────────────────────────────────────────────
@@ -319,4 +335,38 @@ export async function handleCorrectionFlow(
   }
 
   return null;
+}
+
+/**
+ * Handles bulk_yes / bulk_no inline-button callbacks.
+ * Reads the pending bulk-delete state from the session and either executes
+ * or cancels the deletion.
+ */
+export async function handleBulkDeleteCallback(
+  action: 'yes' | 'no',
+  userId: string,
+  db: DbPool,
+  logger: FastifyBaseLogger,
+): Promise<string> {
+  if (action === 'no') {
+    await clearPendingBulkDelete(db, userId);
+    logger.info({ userId }, 'Bulk delete cancelled via inline button');
+    return BULK_DELETE_CANCELLED;
+  }
+
+  const pending = await getPendingBulkDelete(db, userId);
+  if (!pending) {
+    return '⏱ Время подтверждения истекло. Отправь команду заново.';
+  }
+
+  const deleted = await executeBulkDelete(db, userId, pending.dateFrom, pending.dateTo, pending.kind);
+  await clearPendingBulkDelete(db, userId);
+
+  if (deleted === 0) {
+    logger.warn({ userId, period: pending.period }, 'Bulk delete via button: no rows affected');
+    return 'Операции уже удалены или не найдены.';
+  }
+
+  logger.info({ userId, deleted, period: pending.period }, 'Bulk delete executed via inline button');
+  return formatBulkDeleteSuccess(pending, deleted);
 }
