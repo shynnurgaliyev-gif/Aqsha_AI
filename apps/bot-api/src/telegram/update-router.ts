@@ -8,6 +8,9 @@ import { matchBillingCommand } from './billing/billing-command-matcher';
 import { handleBillingCommand } from './billing/billing-service';
 import { handleBudgetCommand } from './budgets/budget-handler';
 import { handleGoalCommand } from './goals/goal-handler';
+import { handleRecurringCommand } from './recurring/recurring-handler';
+import { findRecurringExpenseById, insertTransactionFromRecurring } from './recurring/recurring-repository';
+import { formatRecurringConfirmed } from './recurring/recurring-formatter';
 import { handleCorrectionFlow } from './transaction-correction/correction-handler';
 import { handleTextMessage, CONFIRMATION_KEYBOARD } from './text-intake/handler';
 import { handleVoiceMessage } from './voice-intake/handler';
@@ -108,6 +111,21 @@ export async function routeTelegramUpdate(
               logger.info({ updateId: update.update_id }, 'Goal command handled');
               await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: goalResponse }, logger);
             } else {
+              // Recurring expense commands: create / list / delete.
+              // Returns null if the text is not a recognised recurring command.
+              let recurringResponse: string | null = null;
+              try {
+                recurringResponse = await handleRecurringCommand(msg.text ?? '', userId, db, env, logger);
+              } catch (err) {
+                logger.error({ err, updateId: update.update_id }, 'Recurring command error');
+                await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: 'Не удалось выполнить команду. Попробуйте позже.' }, logger);
+                break;
+              }
+
+              if (recurringResponse !== null) {
+                logger.info({ updateId: update.update_id }, 'Recurring command handled');
+                await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: recurringResponse }, logger);
+              } else {
             // Correction flow: handles pending state confirmation and correction commands.
             // Returns null to fall through to text intake when nothing matches.
             const correctionResponse = await handleCorrectionFlow(msg.text ?? '', userId, db, logger);
@@ -148,6 +166,7 @@ export async function routeTelegramUpdate(
                 await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: result.message }, logger);
               }
             }
+              }
             }
           }
         }
@@ -239,6 +258,30 @@ export async function routeTelegramUpdate(
             await clearPendingDraft(db, userId);
             logger.info({ updateId: update.update_id, userId }, 'Transaction cancelled via inline button');
             await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: '❌ Отменено.' }, logger);
+          }
+        } else if (data?.startsWith('rec_yes:') || data?.startsWith('rec_no:')) {
+          // Recurring expense reminder confirmation.
+          const recurringId = data.split(':')[1];
+          if (recurringId) {
+            const recurring = await findRecurringExpenseById(db, recurringId);
+            if (!recurring || !recurring.isActive) {
+              await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: '⏱ Регулярный расход не найден или уже удалён.' }, logger);
+            } else if (data.startsWith('rec_yes:')) {
+              await insertTransactionFromRecurring(db, userId, recurring);
+              logger.info({ updateId: update.update_id, userId, recurringId }, 'Recurring expense confirmed and transaction inserted');
+              await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: formatRecurringConfirmed(recurring) }, logger);
+              try {
+                const budgetStatus = await getBudgetStatus(db, userId, recurring.categoryId);
+                if (budgetStatus && budgetStatus.remaining < 0) {
+                  await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: formatBudgetAlert(budgetStatus) }, logger);
+                }
+              } catch (err) {
+                logger.warn({ err }, 'Budget alert check failed after recurring confirm — skipping');
+              }
+            } else {
+              logger.info({ updateId: update.update_id, userId, recurringId }, 'Recurring expense reminder skipped');
+              await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: '❌ Пропущено. Напомню в следующем месяце.' }, logger);
+            }
           }
         } else {
           logger.info({ updateId: update.update_id, data }, 'Unknown callback_query data — ignored');

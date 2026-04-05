@@ -5,6 +5,7 @@ import { dailyRecommendationDeliverHandler } from '../daily-recommendations/hand
 import { dailyRecommendationDeliverStubHandler } from '../daily-recommendations/handlers/deliver-stub';
 import { weeklyReportGenerateHandler } from '../weekly-reports/handlers/generate';
 import { weeklyReportDeliverHandler } from '../weekly-reports/handlers/deliver';
+import { recurringReminderSendHandler } from '../recurring-reminders/handler';
 
 /**
  * Registry of known job type handlers.
@@ -18,6 +19,7 @@ const handlers = new Map<string, JobHandler>([
   ['daily_recommendation_deliver_stub', dailyRecommendationDeliverStubHandler],
   ['weekly_report_generate', weeklyReportGenerateHandler],
   ['weekly_report_deliver', weeklyReportDeliverHandler],
+  ['recurring_reminder_send', recurringReminderSendHandler],
 ]);
 
 /**

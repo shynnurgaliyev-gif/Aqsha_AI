@@ -5,6 +5,7 @@ import { processJobs } from './job-queue/processor';
 import { runSubscriptionLifecycleCheck } from './subscriptions/lifecycle';
 import { runDailyRecommendationScheduler } from './daily-recommendations/scheduler';
 import { runWeeklyReportScheduler } from './weekly-reports/scheduler';
+import { runRecurringReminderScheduler } from './recurring-reminders/scheduler';
 
 export interface WorkerInstance {
   start(): void;
@@ -38,6 +39,7 @@ export function createWorker(env: AppEnv, db: DbPool): WorkerInstance {
       await runSubscriptionLifecycleCheck(db, logger);
       await runDailyRecommendationScheduler(db, logger);
       await runWeeklyReportScheduler(db, logger);
+      await runRecurringReminderScheduler(db, logger);
       await processJobs(db, env, logger);
     } catch (err) {
       logger.error({ err }, 'Unhandled error in worker tick');
