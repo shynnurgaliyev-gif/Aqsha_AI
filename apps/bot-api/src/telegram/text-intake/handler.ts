@@ -3,10 +3,13 @@ import type { AppEnv } from '@aqsha-ai/config';
 import type { DbPool } from '@aqsha-ai/database';
 import type { TelegramMessage } from '../types';
 import { parseIntakeText } from './parser';
+import type { IntakeKind } from './parser';
 import { parseWithAi } from './ai-parser';
 import { resolveCategory } from './category-resolver';
+import type { ResolvedCategory } from './category-resolver';
 import { getPendingDraft, setPendingDraft, clearPendingDraft } from './session-draft';
 import { insertConfirmedTransaction } from './transaction-inserter';
+import { getCategoryHint, setCategoryHint } from './category-hints';
 import type { IntakeResult } from './response';
 
 /** Formats a number with space as thousands separator: 14500 → "14 500" */
@@ -30,6 +33,37 @@ function isConfirmation(text: string): boolean {
 
 function isCancellation(text: string): boolean {
   return CANCELLATION_TOKENS.has(text.toLowerCase().trim());
+}
+
+/**
+ * Resolves a category candidate with a cache layer.
+ * 1. Check category_hints — return immediately on hit.
+ * 2. Fall back to resolveCategory (DB lookup).
+ * 3. On success, save to cache for future requests.
+ * Cache errors are silently ignored in both directions.
+ */
+async function resolveWithCache(
+  db: DbPool,
+  userId: string,
+  kind: IntakeKind,
+  candidate: string,
+): Promise<ResolvedCategory | null> {
+  // 1. Cache lookup
+  try {
+    const cached = await getCategoryHint(db, userId, candidate, kind);
+    if (cached) return cached;
+  } catch {
+    // Cache miss or error — fall through
+  }
+
+  // 2. DB resolution
+  const resolved = await resolveCategory(db, userId, kind, candidate);
+  if (!resolved) return null;
+
+  // 3. Save to cache (fire-and-forget — errors must not affect main flow)
+  setCategoryHint(db, userId, candidate, kind, resolved.id, resolved.name).catch(() => undefined);
+
+  return resolved;
 }
 
 /**
@@ -98,7 +132,7 @@ export async function handleTextMessage(
   // If both fail, return a safe unsupported response — no draft is created.
   let parsed = parseIntakeText(text);
   let category = parsed
-    ? await resolveCategory(db, userId, parsed.kind, parsed.categoryCandidate)
+    ? await resolveWithCache(db, userId, parsed.kind, parsed.categoryCandidate)
     : null;
 
   // If deterministic parse found a transaction but the category is unknown,
@@ -107,7 +141,7 @@ export async function handleTextMessage(
     logger.info({ userId, candidate: parsed.categoryCandidate }, 'Text intake: category not found, retrying with AI');
     parsed = await parseWithAi(text, env.OPENAI_API_KEY, env.OPENAI_MODEL, logger);
     category = parsed
-      ? await resolveCategory(db, userId, parsed.kind, parsed.categoryCandidate)
+      ? await resolveWithCache(db, userId, parsed.kind, parsed.categoryCandidate)
       : null;
   }
 
@@ -116,7 +150,7 @@ export async function handleTextMessage(
     parsed = await parseWithAi(text, env.OPENAI_API_KEY, env.OPENAI_MODEL, logger);
     if (parsed) {
       logger.info({ userId, kind: parsed.kind, amount: parsed.amount }, 'Text intake: AI parse used');
-      category = await resolveCategory(db, userId, parsed.kind, parsed.categoryCandidate);
+      category = await resolveWithCache(db, userId, parsed.kind, parsed.categoryCandidate);
     }
   }
 
