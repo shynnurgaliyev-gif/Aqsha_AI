@@ -13,8 +13,8 @@ export async function getCategoryHint(
   kind: IntakeKind,
 ): Promise<ResolvedCategory | null> {
   const key = candidate.toLowerCase().trim();
-  const rows = await db<{ id: string; name: string; kind: string }[]>`
-    SELECT category_id::text AS id, category_name AS name, ${kind} AS kind
+  const rows = await db<{ id: string; name: string }[]>`
+    SELECT category_id::text AS id, category_name AS name
     FROM public.category_hints
     WHERE user_id = ${userId}::uuid
       AND candidate = ${key}
