@@ -3,6 +3,8 @@ import { noopHandler } from './handlers/noop';
 import { dailyRecommendationGenerateHandler } from '../daily-recommendations/handlers/generate';
 import { dailyRecommendationDeliverHandler } from '../daily-recommendations/handlers/deliver';
 import { dailyRecommendationDeliverStubHandler } from '../daily-recommendations/handlers/deliver-stub';
+import { weeklyReportGenerateHandler } from '../weekly-reports/handlers/generate';
+import { weeklyReportDeliverHandler } from '../weekly-reports/handlers/deliver';
 
 /**
  * Registry of known job type handlers.
@@ -14,6 +16,8 @@ const handlers = new Map<string, JobHandler>([
   ['daily_recommendation_deliver', dailyRecommendationDeliverHandler],
   // deliver-stub kept for backward compat with any previously queued stub jobs
   ['daily_recommendation_deliver_stub', dailyRecommendationDeliverStubHandler],
+  ['weekly_report_generate', weeklyReportGenerateHandler],
+  ['weekly_report_deliver', weeklyReportDeliverHandler],
 ]);
 
 /**

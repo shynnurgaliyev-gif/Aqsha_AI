@@ -4,6 +4,7 @@ import type { DbPool } from '@aqsha-ai/database';
 import { processJobs } from './job-queue/processor';
 import { runSubscriptionLifecycleCheck } from './subscriptions/lifecycle';
 import { runDailyRecommendationScheduler } from './daily-recommendations/scheduler';
+import { runWeeklyReportScheduler } from './weekly-reports/scheduler';
 
 export interface WorkerInstance {
   start(): void;
@@ -36,6 +37,7 @@ export function createWorker(env: AppEnv, db: DbPool): WorkerInstance {
       logger.debug('Worker tick');
       await runSubscriptionLifecycleCheck(db, logger);
       await runDailyRecommendationScheduler(db, logger);
+      await runWeeklyReportScheduler(db, logger);
       await processJobs(db, env, logger);
     } catch (err) {
       logger.error({ err }, 'Unhandled error in worker tick');
