@@ -17,6 +17,23 @@ export function createApp(env: AppEnv, db: DbPool): FastifyInstance {
     },
   });
 
+  // Capture raw request body as string before JSON parsing.
+  // Required for HMAC-SHA256 signature verification on billing webhooks —
+  // re-serialising with JSON.stringify changes key order and whitespace,
+  // which would break the signature check.
+  app.addContentTypeParser(
+    'application/json',
+    { parseAs: 'string' },
+    (req, body, done) => {
+      (req as unknown as Record<string, unknown>)['rawBody'] = body;
+      try {
+        done(null, JSON.parse(body as string));
+      } catch (err) {
+        done(err as Error, undefined);
+      }
+    },
+  );
+
   // ── Health ──────────────────────────────────────────────────────────────────
   const healthResponse = { status: 'ok', service: env.APP_NAME, env: env.NODE_ENV };
   app.get('/health', async () => healthResponse);
