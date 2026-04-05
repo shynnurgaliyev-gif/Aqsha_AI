@@ -58,9 +58,15 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 
   // ── Billing ──────────────────────────────────────────────────────────────
-  BILLING_PROVIDER: z.enum(['stub']).default('stub'),
-  TRIAL_DAYS: z.coerce.number().int().positive().default(7),
-  MONTHLY_PRICE_KZT: z.coerce.number().int().positive().default(800),
+  BILLING_PROVIDER: z.enum(['stub', 'kaspi_qr', 'tiptoppay']).default('stub'),
+  TRIAL_DAYS: z.coerce.number().int().positive().default(8),
+  MONTHLY_PRICE_KZT: z.coerce.number().int().positive().default(1490),
+
+  // ── Kaspi QR (ApiPay.kz) ─────────────────────────────────────────────────
+  KASPI_API_KEY: z.string().min(1).optional(),
+  KASPI_API_BASE_URL: z.string().url().default('https://bpapi.bazarbay.site/api/v1'),
+  KASPI_WEBHOOK_SECRET: z.string().min(1).optional(),
+  KASPI_TEST_MODE: envBool(false),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

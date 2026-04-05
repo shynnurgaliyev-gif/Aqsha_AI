@@ -3,9 +3,13 @@ import type { AppEnv } from '@aqsha-ai/config';
 import type { DbPool } from '@aqsha-ai/database';
 import type { TelegramUpdate, TelegramUpdateType } from './types';
 import { bootstrapUser } from './user-bootstrap-service';
-import { checkSubscriptionAccess, PAYWALL_MESSAGE } from './access-control';
+import { checkSubscriptionAccess, PAYWALL_MESSAGE, PAYWALL_KEYBOARD } from './access-control';
 import { matchBillingCommand } from './billing/billing-command-matcher';
-import { handleBillingCommand } from './billing/billing-service';
+import { handleBillingCommand, type BotMessage } from './billing/billing-service';
+import {
+  handleBillingPayCallback,
+  handleBillingPhoneInput,
+} from '../billing/billing-service';
 import { handleBudgetCommand } from './budgets/budget-handler';
 import { handleGoalCommand } from './goals/goal-handler';
 import { handleRecurringCommand } from './recurring/recurring-handler';
@@ -61,16 +65,35 @@ export async function routeTelegramUpdate(
 
         if (matchBillingCommand(msg.text ?? '')) {
           logger.info({ updateId: update.update_id, userId }, 'Billing command received');
-          const billingResponse = await handleBillingCommand(userId, currentPlanStatus, db, logger);
-          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: billingResponse }, logger);
+          const billingResponse: BotMessage = await handleBillingCommand(userId, currentPlanStatus, db, env, logger);
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+            chatId: msg.chat.id,
+            text: billingResponse.text,
+            reply_markup: billingResponse.reply_markup,
+          }, logger);
           break;
         }
 
         // ── Access gate ────────────────────────────────────────────────────────
         if (checkSubscriptionAccess(currentPlanStatus) === 'blocked') {
           logger.info({ updateId: update.update_id, planStatus: currentPlanStatus }, 'Access blocked — paywall shown');
-          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: PAYWALL_MESSAGE }, logger);
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+            chatId: msg.chat.id,
+            text: PAYWALL_MESSAGE,
+            reply_markup: PAYWALL_KEYBOARD,
+          }, logger);
           break;
+        }
+
+        // ── Billing phone input interception ───────────────────────────────────
+        // Must run before analytics/correction so pending phone state is consumed.
+        {
+          const billingPhoneResponse = await handleBillingPhoneInput(msg.text ?? '', userId, db, env, logger);
+          if (billingPhoneResponse !== null) {
+            logger.info({ updateId: update.update_id, userId }, 'Billing phone input handled');
+            await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: billingPhoneResponse.text }, logger);
+            break;
+          }
         }
 
         // Analytics queries take priority over correction and text intake.
@@ -221,13 +244,20 @@ export async function routeTelegramUpdate(
         // Always answer the callback query to dismiss the button spinner.
         await answerCallbackQuery(env.TELEGRAM_BOT_TOKEN, callbackQuery.id, logger);
 
+        const data = callbackQuery.data;
+
+        // ── Billing pay callback — accessible even when blocked ───────────────
+        if (data === 'billing_pay') {
+          const billingPayResponse = await handleBillingPayCallback(userId, db, env, logger);
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: billingPayResponse.text }, logger);
+          break;
+        }
+
         // ── Access gate ──────────────────────────────────────────────────────
         if (checkSubscriptionAccess(currentPlanStatus) === 'blocked') {
           logger.info({ updateId: update.update_id, planStatus: currentPlanStatus }, 'Access blocked — callback query not processed');
           break;
         }
-
-        const data = callbackQuery.data;
 
         if (data === 'confirm' || data === 'cancel') {
           const draft = await getPendingDraft(db, userId);

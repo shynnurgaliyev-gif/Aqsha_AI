@@ -1,3 +1,5 @@
+import { PAYWALL_TEXT, PAYWALL_KEYBOARD } from '../billing/billing-formatter';
+
 /**
  * Subscription access gating for inbound Telegram updates.
  *
@@ -35,14 +37,4 @@ export function checkSubscriptionAccess(planStatus: string): 'allowed' | 'blocke
   }
 }
 
-/**
- * Paywall message shown to users with expired/blocked/canceled subscriptions.
- *
- * Mentions the billing entry command so users know how to proceed.
- * Payment integration is not yet implemented — no real invoice link exists yet.
- */
-export const PAYWALL_MESSAGE =
-  'Ваш пробный период завершён.\n\n' +
-  'Aqsha AI — 800 ₸/месяц.\n\n' +
-  'Напишите «оплатить», чтобы узнать о подписке.\n' +
-  'Приём платежей откроется в ближайшее время.';
+export { PAYWALL_TEXT as PAYWALL_MESSAGE, PAYWALL_KEYBOARD };

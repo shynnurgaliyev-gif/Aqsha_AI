@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import type { AppEnv } from '@aqsha-ai/config';
 import type { DbPool } from '@aqsha-ai/database';
 import { createWebhookRoute } from './telegram/webhook-route';
+import { createBillingWebhookRoute } from './billing-webhook-route';
 
 /**
  * Creates and configures the Fastify application.
@@ -23,6 +24,9 @@ export function createApp(env: AppEnv, db: DbPool): FastifyInstance {
 
   // ── Telegram webhook ─────────────────────────────────────────────────────────
   void app.register(createWebhookRoute(env, db));
+
+  // ── Billing webhook ───────────────────────────────────────────────────────────
+  void app.register(createBillingWebhookRoute(env, db));
 
   return app;
 }
