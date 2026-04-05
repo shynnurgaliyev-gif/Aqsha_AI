@@ -69,7 +69,7 @@ export async function routeTelegramUpdate(
           await sendMessage(env.TELEGRAM_BOT_TOKEN, {
             chatId: msg.chat.id,
             text: billingResponse.text,
-            reply_markup: billingResponse.reply_markup,
+            ...(billingResponse.reply_markup ? { reply_markup: billingResponse.reply_markup } : {}),
           }, logger);
           break;
         }

@@ -1,6 +1,7 @@
 import type { FastifyBaseLogger } from 'fastify';
 import type { AppEnv } from '@aqsha-ai/config';
 import type { DbPool } from '@aqsha-ai/database';
+import type { InlineKeyboardMarkup } from '../telegram/telegram-client';
 import { createBillingProvider } from './billing-factory';
 import {
   createPendingPayment,
@@ -23,7 +24,7 @@ import {
 
 export interface BotMessage {
   text: string;
-  reply_markup?: object;
+  reply_markup?: InlineKeyboardMarkup;
 }
 
 /** Normalises a Kazakh phone number to 87XXXXXXXXX format. Returns null if invalid. */
@@ -67,7 +68,7 @@ export async function handleBillingPayCallback(
   if (env.KASPI_TEST_MODE) {
     await activateSubscription(db, {
       userId,
-      provider: 'kaspi_qr',
+      provider: env.BILLING_PROVIDER,
       invoiceId: `test_${Date.now()}`,
       amountKzt: env.MONTHLY_PRICE_KZT,
     });

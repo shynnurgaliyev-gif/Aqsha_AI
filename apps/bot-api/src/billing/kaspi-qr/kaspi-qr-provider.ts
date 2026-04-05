@@ -56,10 +56,10 @@ export class KaspiQrProvider implements IBillingProvider {
       return { paid: false };
     }
     const invoice = await this.client.getInvoice(invoiceId);
-    return {
-      paid: invoice.status === 'paid',
-      paidAt: invoice.paid_at ? new Date(invoice.paid_at) : undefined,
-    };
+    const paid = invoice.status === 'paid';
+    return paid && invoice.paid_at
+      ? { paid, paidAt: new Date(invoice.paid_at) }
+      : { paid };
   }
 
   verifyWebhook(rawBody: string, signature: string): boolean {

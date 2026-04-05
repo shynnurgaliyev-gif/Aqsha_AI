@@ -13,7 +13,8 @@ export function createBillingProvider(env: AppEnv): IBillingProvider {
       return new KaspiQrProvider(env);
     case 'tiptoppay':
       return new TipTopPayProvider();
-    default:
-      throw new Error(`Unknown BILLING_PROVIDER: "${env.BILLING_PROVIDER}". Use kaspi_qr or tiptoppay.`);
+    case 'stub':
+      // stub = KaspiQr forced into test mode (no real API calls)
+      return new KaspiQrProvider({ ...env, KASPI_TEST_MODE: true });
   }
 }

@@ -1,3 +1,5 @@
+import type { InlineKeyboardMarkup } from '../telegram/telegram-client';
+
 /**
  * All user-facing billing messages in one place.
  */
@@ -14,7 +16,7 @@ export const SUBSCRIPTION_INFO =
   `✅ Отмена в любой момент`;
 
 /** Inline keyboard under SUBSCRIPTION_INFO */
-export function SUBSCRIPTION_INFO_KEYBOARD(testMode: boolean): object {
+export function SUBSCRIPTION_INFO_KEYBOARD(testMode: boolean): InlineKeyboardMarkup {
   if (testMode) {
     return {
       inline_keyboard: [[
