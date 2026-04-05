@@ -48,7 +48,8 @@ export function matchBulkDeleteCommand(text: string): BulkDeleteCommand | null {
   const period = detectPeriod(t);
   if (!period) return null;
 
-  return { period, kind: detectKind(t) };
+  const kind = detectKind(t);
+  return kind !== undefined ? { period, kind } : { period };
 }
 
 export function getPeriodLabel(period: BulkDeletePeriod): string {
@@ -71,7 +72,7 @@ export function getDateBounds(period: BulkDeletePeriod, timezone: string): { fro
   function shiftDay(base: string, days: number): string {
     const d = new Date(base + 'T12:00:00Z');
     d.setUTCDate(d.getUTCDate() + days);
-    return d.toISOString().split('T')[0];
+    return d.toISOString().slice(0, 10);
   }
 
   switch (period) {
@@ -93,7 +94,9 @@ export function getDateBounds(period: BulkDeletePeriod, timezone: string): { fro
       return { from: todayStr.slice(0, 7) + '-01', to: todayStr };
 
     case 'previous_month': {
-      const [year, month] = todayStr.split('-').map(Number);
+      const parts = todayStr.split('-');
+      const year  = Number(parts[0]);
+      const month = Number(parts[1]);
       const prevMonth = month === 1 ? 12 : month - 1;
       const prevYear  = month === 1 ? year - 1 : year;
       const mm        = String(prevMonth).padStart(2, '0');

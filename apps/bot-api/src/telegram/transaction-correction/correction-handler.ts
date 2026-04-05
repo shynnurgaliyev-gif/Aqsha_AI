@@ -24,6 +24,7 @@ import {
   getPendingBulkDelete,
   setPendingBulkDelete,
   clearPendingBulkDelete,
+  type PendingBulkDeleteState,
 } from './correction-bulk-delete-session';
 import { resolveCategory } from '../text-intake/category-resolver';
 import {
@@ -244,15 +245,17 @@ export async function handleCorrectionFlow(
       return BULK_DELETE_NOTHING_FOUND;
     }
 
-    const state = {
+    const baseState = {
       period:      bulkDeleteCmd.period,
-      kind:        bulkDeleteCmd.kind,
       count:       preview.count,
       totalAmount: preview.totalAmount,
       dateFrom:    from,
       dateTo:      to,
       periodLabel,
     };
+    const state: PendingBulkDeleteState = bulkDeleteCmd.kind !== undefined
+      ? { ...baseState, kind: bulkDeleteCmd.kind }
+      : baseState;
 
     await setPendingBulkDelete(db, userId, state);
     logger.info({ userId, count: preview.count, period: bulkDeleteCmd.period }, 'Pending bulk delete set');
