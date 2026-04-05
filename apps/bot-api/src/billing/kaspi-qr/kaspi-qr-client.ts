@@ -31,10 +31,14 @@ export interface ApiPayWebhookPayload {
 export class KaspiQrClient {
   private readonly baseUrl: string;
   private readonly apiKey: string;
+  private readonly webhookSecret: string;
 
-  constructor(apiKey: string, baseUrl: string) {
+  constructor(apiKey: string, baseUrl: string, webhookSecret?: string) {
     this.apiKey = apiKey;
     this.baseUrl = baseUrl.replace(/\/$/, '');
+    // ApiPay.kz signs webhooks with a separate secret if configured,
+    // otherwise falls back to the API key itself.
+    this.webhookSecret = webhookSecret ?? apiKey;
   }
 
   private headers(): Record<string, string> {
@@ -87,7 +91,7 @@ export class KaspiQrClient {
    * Secret is the API key itself.
    */
   verifySignature(rawBody: string, signatureHeader: string): boolean {
-    const expected = `sha256=${createHmac('sha256', this.apiKey).update(rawBody).digest('hex')}`;
+    const expected = `sha256=${createHmac('sha256', this.webhookSecret).update(rawBody).digest('hex')}`;
     return signatureHeader === expected;
   }
 }
