@@ -74,7 +74,7 @@ export const recurringReminderSendHandler: JobHandler = async (job, ctx) => {
     ]],
   };
 
-  await sendTelegramMessageWithKeyboard(env.TELEGRAM_BOT_TOKEN, chatId, text, keyboard, logger);
+  await sendTelegramMessageWithKeyboard(env.TELEGRAM_BOT_TOKEN, chatId, text, keyboard, logger, env.TELEGRAM_RATE_LIMIT_DELAY_MS);
 
   logger.info(
     { recurringId, userId, chatId, description: recurring.description },

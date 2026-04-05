@@ -76,7 +76,7 @@ export const dailyRecommendationDeliverHandler: JobHandler = async (job, ctx) =>
   const chatId = Number(user.telegram_user_id);
 
   try {
-    await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, recommendation.message_text, logger);
+    await sendTelegramMessage(env.TELEGRAM_BOT_TOKEN, chatId, recommendation.message_text, logger, env.TELEGRAM_RATE_LIMIT_DELAY_MS);
   } catch (err) {
     const errorText = err instanceof Error ? err.message : String(err);
     await markRecommendationFailed(db, recommendationId, errorText);

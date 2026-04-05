@@ -21,11 +21,16 @@ interface InlineKeyboard {
  * Throwing is required so the job processor can mark the job as failed and
  * allow the job queue to retry up to max_attempts.
  */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function sendTelegramMessage(
   botToken: string,
   chatId: number,
   text: string,
   logger: Logger,
+  rateLimitDelayMs = 0,
 ): Promise<void> {
   const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
 
@@ -61,6 +66,8 @@ export async function sendTelegramMessage(
     );
     throw new Error(`Telegram API error ${body.error_code ?? 'unknown'}: ${body.description ?? ''}`);
   }
+
+  if (rateLimitDelayMs > 0) await sleep(rateLimitDelayMs);
 }
 
 /**
@@ -73,6 +80,7 @@ export async function sendTelegramMessageWithKeyboard(
   text: string,
   keyboard: InlineKeyboard,
   logger: Logger,
+  rateLimitDelayMs = 0,
 ): Promise<void> {
   const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
 
@@ -108,4 +116,6 @@ export async function sendTelegramMessageWithKeyboard(
     );
     throw new Error(`Telegram API error ${body.error_code ?? 'unknown'}: ${body.description ?? ''}`);
   }
+
+  if (rateLimitDelayMs > 0) await sleep(rateLimitDelayMs);
 }

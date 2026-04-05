@@ -43,7 +43,11 @@ const envSchema = z.object({
 
   // ── Worker / Jobs ────────────────────────────────────────────────────────
   JOB_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(5000),
-  JOB_BATCH_SIZE: z.coerce.number().int().positive().default(10),
+  JOB_BATCH_SIZE: z.coerce.number().int().positive().default(25),
+  // Telegram Bot API hard limit: 30 messages/sec per bot.
+  // With 2 workers × 25 batch = 50 potential sends/tick.
+  // Set to 35ms delay after each send = ~28 msg/sec per worker instance.
+  TELEGRAM_RATE_LIMIT_DELAY_MS: z.coerce.number().int().min(0).default(35),
   DAILY_RECOMMENDATION_DEFAULT_HOUR: z.coerce.number().int().min(0).max(23).default(9),
 
   // ── Admin ────────────────────────────────────────────────────────────────
