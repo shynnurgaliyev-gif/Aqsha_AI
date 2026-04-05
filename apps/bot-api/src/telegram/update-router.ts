@@ -7,6 +7,7 @@ import { checkSubscriptionAccess, PAYWALL_MESSAGE } from './access-control';
 import { matchBillingCommand } from './billing/billing-command-matcher';
 import { handleBillingCommand } from './billing/billing-service';
 import { handleBudgetCommand } from './budgets/budget-handler';
+import { handleGoalCommand } from './goals/goal-handler';
 import { handleCorrectionFlow } from './transaction-correction/correction-handler';
 import { handleTextMessage, CONFIRMATION_KEYBOARD } from './text-intake/handler';
 import { handleVoiceMessage } from './voice-intake/handler';
@@ -92,6 +93,21 @@ export async function routeTelegramUpdate(
             logger.info({ updateId: update.update_id }, 'Budget command handled');
             await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: budgetResponse }, logger);
           } else {
+            // Goal commands: create / add_savings / list / show / delete savings goals.
+            // Returns null if the text is not a recognised goal command.
+            let goalResponse: string | null = null;
+            try {
+              goalResponse = await handleGoalCommand(msg.text ?? '', userId, db, logger);
+            } catch (err) {
+              logger.error({ err, updateId: update.update_id }, 'Goal command error');
+              await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: 'Не удалось выполнить команду. Попробуйте позже.' }, logger);
+              break;
+            }
+
+            if (goalResponse !== null) {
+              logger.info({ updateId: update.update_id }, 'Goal command handled');
+              await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: goalResponse }, logger);
+            } else {
             // Correction flow: handles pending state confirmation and correction commands.
             // Returns null to fall through to text intake when nothing matches.
             const correctionResponse = await handleCorrectionFlow(msg.text ?? '', userId, db, logger);
