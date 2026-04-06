@@ -20,6 +20,14 @@ interface TelegramApiResponse {
   description?: string;
 }
 
+/** Returned when Telegram responds with 429 Too Many Requests. */
+class TelegramRateLimitError extends Error {
+  constructor(public readonly retryAfterSeconds: number, message: string) {
+    super(message);
+    this.name = 'TelegramRateLimitError';
+  }
+}
+
 async function callTelegramApi(botToken: string, method: string, body: Record<string, unknown>): Promise<void> {
   const url = `${TELEGRAM_API}/bot${botToken}/${method}`;
 
@@ -39,6 +47,13 @@ async function callTelegramApi(botToken: string, method: string, body: Record<st
     data = (await response.json()) as TelegramApiResponse;
   } catch (err) {
     throw new Error(`Telegram ${method} HTTP ${response.status} — response parse error: ${String(err)}`);
+  }
+
+  if (response.status === 429) {
+    // Extract retry_after from description: "Too Many Requests: retry after N"
+    const match = /retry after (\d+)/i.exec(data.description ?? '');
+    const retryAfter = match ? parseInt(match[1] ?? '5', 10) : 5;
+    throw new TelegramRateLimitError(retryAfter, `Telegram ${method} rate limited — retry after ${retryAfter}s`);
   }
 
   if (!response.ok || !data.ok) {
@@ -69,7 +84,17 @@ export async function setWebhook(botToken: string, webhookUrl: string, secretTok
     body['secret_token'] = secretToken;
   }
 
-  await callTelegramApi(botToken, 'setWebhook', body);
+  // Retry once on 429 — Telegram rate-limits setWebhook on rapid redeploys.
+  try {
+    await callTelegramApi(botToken, 'setWebhook', body);
+  } catch (err) {
+    if (err instanceof TelegramRateLimitError) {
+      await new Promise((resolve) => setTimeout(resolve, err.retryAfterSeconds * 1000));
+      await callTelegramApi(botToken, 'setWebhook', body);
+    } else {
+      throw err;
+    }
+  }
 }
 
 /**
