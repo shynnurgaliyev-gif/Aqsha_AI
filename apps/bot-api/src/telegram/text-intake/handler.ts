@@ -3,7 +3,7 @@ import type { AppEnv } from '@aqsha-ai/config';
 import type { DbPool } from '@aqsha-ai/database';
 import type { TelegramMessage } from '../types';
 import { parseIntakeText } from './parser';
-import type { IntakeKind } from './parser';
+import type { IntakeKind, ParsedIntake } from './parser';
 import { parseBulkInput } from './bulk-parser';
 import { parseWithAi } from './ai-parser';
 import { resolveCategory } from './category-resolver';
@@ -157,14 +157,29 @@ export async function handleTextMessage(
     const resolvedItems: BulkDraftItem[] = [];
     const failedLines: string[] = [];
 
-    for (const p of bulkParsed) {
-      const cat = await resolveWithCache(db, userId, p.kind, p.categoryCandidate);
+    // Resolve all items in parallel; fall back to AI remapping for unknown categories.
+    await Promise.all(bulkParsed.map(async (p) => {
+      let effective: ParsedIntake = p;
+      let cat = await resolveWithCache(db, userId, p.kind, p.categoryCandidate);
+
+      if (!cat) {
+        // AI remapping — same logic as single transaction fallback.
+        const aiParsed = await parseWithAi(p.rawText, env.OPENAI_API_KEY, env.OPENAI_MODEL, logger);
+        if (aiParsed) {
+          const aiCat = await resolveWithCache(db, userId, aiParsed.kind, aiParsed.categoryCandidate);
+          if (aiCat) {
+            effective = aiParsed;
+            cat = aiCat;
+          }
+        }
+      }
+
       if (cat) {
-        resolvedItems.push({ kind: p.kind, amount: p.amount, categoryId: cat.id, categoryName: cat.name, rawText: p.rawText });
+        resolvedItems.push({ kind: effective.kind, amount: effective.amount, categoryId: cat.id, categoryName: cat.name, rawText: p.rawText });
       } else {
         failedLines.push(`«${p.categoryCandidate}»`);
       }
-    }
+    }));
 
     if (resolvedItems.length >= 2) {
       await setPendingBulkDraft(db, userId, { items: resolvedItems });
