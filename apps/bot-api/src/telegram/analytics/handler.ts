@@ -9,14 +9,17 @@ import {
   queryBalance,
   queryPeriodTotal,
   queryCategoryBreakdownByPeriod,
+  queryCategoryScopedTotal,
   queryRecentTransactions,
 } from './analytics-repository';
 import {
   formatBalance,
   formatPeriodTotal,
   formatCategoryBreakdownByPeriod,
+  formatCategoryScopedTotal,
   formatRecentTransactions,
 } from './formatter';
+import { resolveCategory } from '../text-intake/category-resolver';
 import type { DateRange } from './period-resolver';
 
 /**
@@ -116,6 +119,21 @@ export async function handleAnalyticsQuery(
       case 'recent_transactions': {
         const rows = await queryRecentTransactions(db, userId);
         return formatRecentTransactions(rows);
+      }
+
+      case 'category_scoped': {
+        const categoryName = query.category ?? '';
+        const kind = query.kind ?? 'expense';
+        const resolved = await resolveCategory(db, userId, kind, categoryName);
+        if (!resolved) {
+          return `Категория "${categoryName}" не найдена. Проверьте название и попробуйте снова.`;
+        }
+        const result = await queryCategoryScopedTotal(db, userId, kind, resolved.id, range);
+        const displayRange = capRangeToToday(range, timezone);
+        if (!result || result.total === 0) {
+          return `По категории "${resolved.name}" нет данных за этот период.`;
+        }
+        return formatCategoryScopedTotal(result, kind, displayRange);
       }
     }
   } catch (err) {

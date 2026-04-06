@@ -9,7 +9,8 @@ export type AnalyticsQueryType =
   | 'income_total'
   | 'expense_categories'
   | 'income_categories'
-  | 'recent_transactions';
+  | 'recent_transactions'
+  | 'category_scoped';
 
 /**
  * Supported deterministic analytics periods.
@@ -34,6 +35,10 @@ export interface AnalyticsQuery {
   type: AnalyticsQueryType;
   /** Period to scope the query. Ignored for 'balance' and 'recent_transactions'. */
   period: AnalyticsPeriod;
+  /** Raw category name — only set for 'category_scoped' queries. */
+  category?: string;
+  /** Transaction kind — only set for 'category_scoped' queries. */
+  kind?: 'expense' | 'income';
 }
 
 /**

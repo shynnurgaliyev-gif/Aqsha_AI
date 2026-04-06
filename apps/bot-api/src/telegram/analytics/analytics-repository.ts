@@ -106,6 +106,48 @@ export async function queryPeriodTotal(
   return Number(rows[0]?.total ?? 0);
 }
 
+export interface CategoryScopedResult {
+  total: number;
+  count: number;
+  categoryName: string;
+}
+
+/**
+ * Returns total amount and transaction count for a specific category in a date range.
+ * categoryId must be pre-resolved from user input via resolveCategory.
+ */
+export async function queryCategoryScopedTotal(
+  db: DbPool,
+  userId: string,
+  kind: 'expense' | 'income',
+  categoryId: string,
+  range: DateRange,
+): Promise<CategoryScopedResult | null> {
+  const rows = await db<{ total: string; count: string; category_name: string }[]>`
+    SELECT
+      COALESCE(SUM(t.amount), 0) AS total,
+      COUNT(*)::text              AS count,
+      c.name                      AS category_name
+    FROM public.transactions t
+    JOIN public.categories c ON c.id = t.category_id
+    WHERE t.user_id    = ${userId}
+      AND t.kind       = ${kind}
+      AND t.category_id = ${categoryId}::uuid
+      AND t.is_deleted  = false
+      AND t.parse_status IN ('confirmed', 'corrected')
+      AND t.transaction_date_local >= ${range.gte}::date
+      AND t.transaction_date_local <  ${range.lt}::date
+    GROUP BY c.name
+  `;
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    total: Number(row.total),
+    count: Number(row.count),
+    categoryName: row.category_name,
+  };
+}
+
 /**
  * Per-category totals for the given kind in the current calendar month.
  * Sorted by total descending, capped at 10 rows.

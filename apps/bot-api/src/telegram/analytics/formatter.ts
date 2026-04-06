@@ -1,6 +1,6 @@
 import type { AnalyticsPeriod } from './query-matcher';
 import type { DateRange } from './period-resolver';
-import type { BalanceSummary, CategoryTotalRow, RecentTransactionRow } from './analytics-repository';
+import type { BalanceSummary, CategoryScopedResult, CategoryTotalRow, RecentTransactionRow } from './analytics-repository';
 
 function formatAmount(amount: number): string {
   return amount.toLocaleString('ru-RU') + ' ₸';
@@ -89,6 +89,30 @@ export function formatCategoryBreakdownByPeriod(
     ...lines,
     '',
     `📝 Записей: ${count}`,
+  ].join('\n');
+}
+
+/** Category-scoped total formatter. */
+export function formatCategoryScopedTotal(
+  result: CategoryScopedResult,
+  kind: 'expense' | 'income',
+  range: DateRange,
+): string {
+  const headerEmoji = kind === 'expense' ? '📊' : '📈';
+  const totalEmoji  = kind === 'expense' ? '💸' : '💰';
+  const totalLabel  = kind === 'expense' ? 'Итого потрачено' : 'Итого получено';
+
+  const end = lastInclusiveDay(range.lt);
+  const header = `${headerEmoji} ${result.categoryName} за ${fmtDateShort(range.gte)} — ${fmtDateFull(end)}:`;
+
+  if (result.total === 0) {
+    return `${header}\nНет данных за этот период.`;
+  }
+
+  return [
+    header,
+    `${totalEmoji} ${totalLabel}: ${formatAmount(result.total)}`,
+    `📝 Записей: ${result.count}`,
   ].join('\n');
 }
 

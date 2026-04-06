@@ -99,10 +99,14 @@ function mapToAnalyticsQuery(result: AiAnalyticsResult): AnalyticsQuery | null {
       return { type: 'income_total', period };
 
     case 'category_breakdown': {
-      if (category !== null) return null; // category-scoped queries not yet supported
+      if (category !== null && kind !== null) {
+        // Category-scoped query: "сколько потратил на еду за месяц"
+        return { type: 'category_scoped', period, category, kind };
+      }
+      if (category !== null) return null; // kind ambiguous — cannot resolve safely
       if (kind === 'expense') return { type: 'expense_categories', period };
       if (kind === 'income') return { type: 'income_categories', period };
-      return null; // ambiguous kind — cannot safely infer expense vs income
+      return null; // ambiguous kind
     }
 
     case 'recent_transactions':
