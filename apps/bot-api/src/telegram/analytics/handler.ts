@@ -19,7 +19,7 @@ import {
   formatCategoryScopedTotal,
   formatRecentTransactions,
 } from './formatter';
-import { resolveCategory } from '../text-intake/category-resolver';
+import { resolveCategory, normalizeCategoryCandidate } from '../text-intake/category-resolver';
 import type { DateRange } from './period-resolver';
 
 /**
@@ -122,7 +122,8 @@ export async function handleAnalyticsQuery(
       }
 
       case 'category_scoped': {
-        const categoryName = query.category ?? '';
+        const rawCategory = query.category ?? '';
+        const categoryName = normalizeCategoryCandidate(rawCategory);
         const kind = query.kind ?? 'expense';
         const resolved = await resolveCategory(db, userId, kind, categoryName);
         if (!resolved) {

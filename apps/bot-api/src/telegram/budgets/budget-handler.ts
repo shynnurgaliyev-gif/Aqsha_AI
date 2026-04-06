@@ -11,7 +11,7 @@ import {
   BUDGET_NOT_FOUND,
   BUDGET_DELETE_NOT_FOUND,
 } from './budget-formatter';
-import { resolveCategory } from '../text-intake/category-resolver';
+import { resolveCategory, normalizeCategoryCandidate } from '../text-intake/category-resolver';
 
 /**
  * Handles monthly budget commands.
@@ -50,7 +50,7 @@ export async function handleBudgetCommand(
 
   // ── show_budget ─────────────────────────────────────────────────────────────
   if (command.type === 'show_budget') {
-    const category = await resolveCategory(db, userId, 'expense', command.categoryCandidate);
+    const category = await resolveCategory(db, userId, 'expense', normalizeCategoryCandidate(command.categoryCandidate));
 
     if (!category) {
       logger.info({ userId, candidate: command.categoryCandidate }, 'Budget show: expense category not found');
@@ -70,7 +70,7 @@ export async function handleBudgetCommand(
 
   // ── delete_budget ────────────────────────────────────────────────────────────
   if (command.type === 'delete_budget') {
-    const category = await resolveCategory(db, userId, 'expense', command.categoryCandidate);
+    const category = await resolveCategory(db, userId, 'expense', normalizeCategoryCandidate(command.categoryCandidate));
 
     if (!category) {
       logger.info({ userId, candidate: command.categoryCandidate }, 'Budget delete: expense category not found');
@@ -90,7 +90,7 @@ export async function handleBudgetCommand(
 
   // ── set_budget ──────────────────────────────────────────────────────────────
   if (command.type === 'set_budget') {
-    const category = await resolveCategory(db, userId, 'expense', command.categoryCandidate);
+    const category = await resolveCategory(db, userId, 'expense', normalizeCategoryCandidate(command.categoryCandidate));
 
     if (!category) {
       logger.info({ userId, candidate: command.categoryCandidate }, 'Budget set: expense category not found');
