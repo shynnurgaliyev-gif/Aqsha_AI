@@ -22,20 +22,26 @@ Rules:
   - "income_total": total amount received overall (NO specific category mentioned)
   - "category_breakdown": spending or income for a SPECIFIC category, or breakdown across all categories
   - "recent_transactions": list of recent transactions
-- CRITICAL: if the user mentions a specific category (food, transport, rent, еда, транспорт, etc.), ALWAYS use "category_breakdown" — never "expense_total" or "income_total"
+- CRITICAL: if the user mentions a specific category (food, transport, rent, еда, транспорт, etc.) WITH a question or time-period intent, use "category_breakdown"
+- CRITICAL: if the message is ONLY a category name + number (e.g. "Еда 100", "транспорт 500", "кафе 1500") → return {"result": null} — this is a transaction entry, NOT an analytics query
+- Analytics queries always contain question words (сколько, как много, покажи) OR time-period words (за месяц, за неделю, сегодня, вчера, прошлый) OR explicit report words (расходы, доходы, итого, статистика)
 - period: time frame the user is asking about; null if no specific period is mentioned
 - kind: "expense" or "income" where relevant; for spending/потратил/расход → "expense"; for income/заработал/доход → "income"; null if unclear
 - category: the specific category name the user mentions (e.g. "еда", "транспорт", "кафе"); null if no specific category
 
-Examples:
+Examples of ANALYTICS queries (return result):
 - "сколько потратил на еду" → {"query_type":"category_breakdown","period":null,"kind":"expense","category":"еда"}
 - "расходы на транспорт за месяц" → {"query_type":"category_breakdown","period":"current_month","kind":"expense","category":"транспорт"}
 - "еда за этот месяц" → {"query_type":"category_breakdown","period":"current_month","kind":"expense","category":"еда"}
 - "транспорт за этот месяц" → {"query_type":"category_breakdown","period":"current_month","kind":"expense","category":"транспорт"}
 - "сколько я потратил на транспорт" → {"query_type":"category_breakdown","period":null,"kind":"expense","category":"транспорт"}
-- "расход еда" → {"query_type":"category_breakdown","period":null,"kind":"expense","category":"еда"}
 - "общие расходы за месяц" → {"query_type":"expense_total","period":"current_month","kind":"expense","category":null}
-- "сколько потратил" → {"query_type":"expense_total","period":null,"kind":"expense","category":null}
+
+Examples of NON-ANALYTICS (return null — these are transaction entries):
+- "Еда 100" → {"result": null}
+- "транспорт 500" → {"result": null}
+- "кафе 1500" → {"result": null}
+- "зарплата 200000" → {"result": null}
 - if in doubt, return {"result": null}`;
 
 type AiPeriod = AnalyticsPeriod | null;
