@@ -41,7 +41,8 @@ function normalisePhone(raw: string): string | null {
 /**
  * Called when user sends "оплатить", "подписка", etc.
  * - active/trial/grace → shows remaining days instead of payment screen.
- * - expired/blocked/canceled/pending → shows payment screen.
+ * - pending → payment in progress; show waiting message (not free trial offer).
+ * - expired/blocked/canceled → shows payment screen.
  */
 export async function handleBillingCommand(
   userId: string,
@@ -51,6 +52,13 @@ export async function handleBillingCommand(
   logger: FastifyBaseLogger,
 ): Promise<BotMessage> {
   logger.info({ provider: env.BILLING_PROVIDER, planStatus }, 'Billing command triggered');
+
+  // Payment was sent to Kaspi but not yet confirmed — do not show "7 days free" offer.
+  if (planStatus === 'pending') {
+    return {
+      text: '⏳ Ваш платёж обрабатывается.\n\nДоступ откроется автоматически сразу после подтверждения оплаты в Kaspi.',
+    };
+  }
 
   const hasActiveSub = planStatus === 'active' || planStatus === 'trial' || planStatus === 'grace';
 
