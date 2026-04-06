@@ -11,6 +11,9 @@ import {
   handleBillingPhoneInput,
 } from '../billing/billing-service';
 import { handleBudgetCommand } from './budgets/budget-handler';
+import { matchExportCommand, parseExportCallback, EXPORT_PERIOD_KEYBOARD } from './export/export-matcher';
+import { handleExportRequest } from './export/export-handler';
+import { sendDocument } from './telegram-client';
 import { handleGoalCommand } from './goals/goal-handler';
 import { handleRecurringCommand } from './recurring/recurring-handler';
 import { findRecurringExpenseById, insertTransactionFromRecurring } from './recurring/recurring-repository';
@@ -95,6 +98,16 @@ export async function routeTelegramUpdate(
             await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: billingPhoneResponse.text }, logger);
             break;
           }
+        }
+
+        // ── Export command ─────────────────────────────────────────────────────
+        if (matchExportCommand(msg.text ?? '')) {
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+            chatId: msg.chat.id,
+            text: '📂 За какой период выгрузить историю?',
+            reply_markup: EXPORT_PERIOD_KEYBOARD,
+          }, logger);
+          break;
         }
 
         // Analytics queries take priority over correction and text intake.
@@ -382,6 +395,22 @@ export async function routeTelegramUpdate(
               logger.info({ updateId: update.update_id, userId, recurringId }, 'Recurring expense reminder skipped');
               await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: '❌ Пропущено. Напомню в следующем месяце.' }, logger);
             }
+          }
+        } else if (data && parseExportCallback(data) !== null) {
+          const period = parseExportCallback(data)!;
+          const exportResult = await handleExportRequest(userId, period, db, logger);
+          if (!exportResult) {
+            await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+              chatId,
+              text: '📭 Нет данных за выбранный период.',
+            }, logger);
+          } else {
+            await sendDocument(env.TELEGRAM_BOT_TOKEN, {
+              chatId,
+              fileBuffer: exportResult.buffer,
+              filename:   exportResult.filename,
+              caption:    exportResult.caption,
+            }, logger);
           }
         } else {
           logger.info({ updateId: update.update_id, data }, 'Unknown callback_query data — ignored');

@@ -71,6 +71,52 @@ export async function sendMessage(
 }
 
 /**
+ * Sends a file document to a Telegram chat.
+ * Used for CSV export — sends the buffer as a multipart upload.
+ * Errors are logged and suppressed — same pattern as sendMessage.
+ */
+export async function sendDocument(
+  botToken: string,
+  params: { chatId: number; fileBuffer: Buffer; filename: string; caption?: string },
+  logger: FastifyBaseLogger,
+): Promise<void> {
+  const url = `https://api.telegram.org/bot${botToken}/sendDocument`;
+
+  const form = new FormData();
+  form.append('chat_id', String(params.chatId));
+  form.append('document', new Blob([params.fileBuffer], { type: 'text/csv' }), params.filename);
+  if (params.caption) form.append('caption', params.caption);
+
+  let response: Response;
+  try {
+    response = await fetch(url, { method: 'POST', body: form });
+  } catch (err) {
+    logger.error({ err, chatId: params.chatId }, 'Telegram sendDocument network error');
+    return;
+  }
+
+  if (!response.ok) {
+    logger.error({ chatId: params.chatId, status: response.status }, 'Telegram sendDocument HTTP error');
+    return;
+  }
+
+  let body: { ok: boolean; error_code?: number; description?: string };
+  try {
+    body = (await response.json()) as typeof body;
+  } catch (err) {
+    logger.error({ err, chatId: params.chatId }, 'Telegram sendDocument response parse error');
+    return;
+  }
+
+  if (!body.ok) {
+    logger.error(
+      { chatId: params.chatId, errorCode: body.error_code, description: body.description },
+      'Telegram sendDocument API error',
+    );
+  }
+}
+
+/**
  * Answers a callback query to dismiss the loading indicator on the inline button.
  * Must be called within 10 seconds of receiving the callback_query update.
  * Errors are logged and suppressed — same pattern as sendMessage.
