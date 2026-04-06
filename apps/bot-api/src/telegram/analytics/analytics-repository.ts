@@ -27,22 +27,29 @@ export async function getUserTimezone(db: DbPool, userId: string): Promise<strin
   return rows[0]?.timezone || FALLBACK_TIMEZONE;
 }
 
+export interface BalanceSummary {
+  balance: number;
+  totalIncome: number;
+  totalExpense: number;
+}
+
 /**
- * Current balance = total confirmed income - total confirmed expense (all time).
+ * Returns all-time balance, total income, and total expense in one query.
  * Only confirmed, non-deleted transactions count.
  */
-export async function queryBalance(db: DbPool, userId: string): Promise<number> {
-  const rows = await db<{ balance: string }[]>`
+export async function queryBalance(db: DbPool, userId: string): Promise<BalanceSummary> {
+  const rows = await db<{ total_income: string; total_expense: string }[]>`
     SELECT
-      COALESCE(SUM(CASE WHEN kind = 'income' THEN amount ELSE 0 END), 0)
-      - COALESCE(SUM(CASE WHEN kind = 'expense' THEN amount ELSE 0 END), 0)
-      AS balance
+      COALESCE(SUM(CASE WHEN kind = 'income' THEN amount ELSE 0 END), 0)  AS total_income,
+      COALESCE(SUM(CASE WHEN kind = 'expense' THEN amount ELSE 0 END), 0) AS total_expense
     FROM public.transactions
-    WHERE user_id = ${userId}
-      AND is_deleted = false
-      AND parse_status = 'confirmed'
+    WHERE user_id    = ${userId}
+      AND is_deleted  = false
+      AND parse_status IN ('confirmed', 'corrected')
   `;
-  return Number(rows[0]?.balance ?? 0);
+  const totalIncome  = Number(rows[0]?.total_income  ?? 0);
+  const totalExpense = Number(rows[0]?.total_expense ?? 0);
+  return { balance: totalIncome - totalExpense, totalIncome, totalExpense };
 }
 
 /**

@@ -1,6 +1,6 @@
 import type { AnalyticsPeriod } from './query-matcher';
 import type { DateRange } from './period-resolver';
-import type { CategoryTotalRow, RecentTransactionRow } from './analytics-repository';
+import type { BalanceSummary, CategoryTotalRow, RecentTransactionRow } from './analytics-repository';
 
 function formatAmount(amount: number): string {
   return amount.toLocaleString('ru-RU') + ' ₸';
@@ -34,9 +34,14 @@ function lastInclusiveDay(lt: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-export function formatBalance(balance: number): string {
+export function formatBalance({ balance, totalIncome, totalExpense }: BalanceSummary): string {
   const sign = balance >= 0 ? '+' : '';
-  return `Баланс: ${sign}${formatAmount(balance)}`;
+  return [
+    `📈 Доходы (всего): ${formatAmount(totalIncome)}`,
+    `📉 Расходы (всего): ${formatAmount(totalExpense)}`,
+    ``,
+    `💼 Баланс: ${sign}${formatAmount(balance)}`,
+  ].join('\n');
 }
 
 /** Period-aware total formatter. Covers all supported periods. */
