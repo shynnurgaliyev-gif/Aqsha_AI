@@ -69,6 +69,25 @@ export async function runSubscriptionLifecycleCheck(db: DbPool, logger: Logger):
         'Subscription lifecycle: grace period subscriptions expired',
       );
     }
+    // ── Expired pending payments cleanup ──────────────────────────────────────
+    // Kaspi QR invoices expire after 15 minutes. Any payment still pending
+    // past its expires_at is stale — mark it expired so it doesn't block
+    // future invoice creation for the same user.
+    const expiredPayments = await db<{ id: string }[]>`
+      UPDATE public.payments
+         SET status = 'expired'
+       WHERE status     = 'pending'
+         AND expires_at IS NOT NULL
+         AND expires_at < now()
+      RETURNING id
+    `;
+
+    if (expiredPayments.length > 0) {
+      logger.info(
+        { count: expiredPayments.length },
+        'Subscription lifecycle: stale pending payments expired',
+      );
+    }
   } catch (err) {
     logger.error({ err }, 'Subscription lifecycle check failed');
   }
