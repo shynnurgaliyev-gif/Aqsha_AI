@@ -17,55 +17,59 @@ import type { Logger } from 'pino';
 export async function runSubscriptionLifecycleCheck(db: DbPool, logger: Logger): Promise<void> {
   try {
     // ── Trial → expired ───────────────────────────────────────────────────────
-    const trialExpired = await db<{ user_id: string }[]>`
-      UPDATE public.subscriptions
-         SET status = 'expired'
-       WHERE is_current = true
-         AND status = 'trial'
-         AND trial_end_at IS NOT NULL
-         AND trial_end_at < now()
-      RETURNING user_id
+    const trialExpired = await db<{ id: string }[]>`
+      UPDATE public.users
+         SET current_plan_status = 'expired',
+             updated_at = now()
+       WHERE current_plan_status = 'trial'
+         AND current_period_end IS NOT NULL
+         AND current_period_end < now()
+         AND is_active = true
+      RETURNING id
     `;
 
     if (trialExpired.length > 0) {
       logger.info(
-        { count: trialExpired.length, userIds: trialExpired.map((r) => r.user_id) },
+        { count: trialExpired.length, userIds: trialExpired.map((r) => r.id) },
         'Subscription lifecycle: trial subscriptions expired',
       );
     }
 
     // ── Active → grace (paid_until passed, grace period begins) ───────────────
-    const movedToGrace = await db<{ user_id: string }[]>`
-      UPDATE public.subscriptions
-         SET status = 'grace'
-       WHERE is_current = true
-         AND status = 'active'
-         AND paid_until IS NOT NULL
-         AND paid_until < now()
-      RETURNING user_id
+    const movedToGrace = await db<{ id: string }[]>`
+      UPDATE public.users
+         SET current_plan_status = 'grace',
+             grace_period_end    = current_period_end + interval '3 days',
+             updated_at          = now()
+       WHERE current_plan_status = 'active'
+         AND current_period_end IS NOT NULL
+         AND current_period_end < now()
+         AND is_active = true
+      RETURNING id
     `;
 
     if (movedToGrace.length > 0) {
       logger.info(
-        { count: movedToGrace.length, userIds: movedToGrace.map((r) => r.user_id) },
+        { count: movedToGrace.length, userIds: movedToGrace.map((r) => r.id) },
         'Subscription lifecycle: subscriptions moved to grace period',
       );
     }
 
-    // ── Grace → expired (grace period of 3 days is over) ─────────────────────
-    const graceExpired = await db<{ user_id: string }[]>`
-      UPDATE public.subscriptions
-         SET status = 'expired'
-       WHERE is_current = true
-         AND status = 'grace'
-         AND paid_until IS NOT NULL
-         AND paid_until + interval '3 days' < now()
-      RETURNING user_id
+    // ── Grace → expired (grace period is over) ────────────────────────────────
+    const graceExpired = await db<{ id: string }[]>`
+      UPDATE public.users
+         SET current_plan_status = 'expired',
+             updated_at          = now()
+       WHERE current_plan_status = 'grace'
+         AND grace_period_end IS NOT NULL
+         AND grace_period_end < now()
+         AND is_active = true
+      RETURNING id
     `;
 
     if (graceExpired.length > 0) {
       logger.info(
-        { count: graceExpired.length, userIds: graceExpired.map((r) => r.user_id) },
+        { count: graceExpired.length, userIds: graceExpired.map((r) => r.id) },
         'Subscription lifecycle: grace period subscriptions expired',
       );
     }

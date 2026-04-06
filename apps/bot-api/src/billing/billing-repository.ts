@@ -44,12 +44,8 @@ export async function findUserByInvoice(
 
 /**
  * Activates a paid subscription:
- *   1. Closes the current subscription (is_current = false).
- *   2. Inserts a new 'active' subscription for 30 days.
- *   3. Marks the payment as paid.
- *
- * The DB trigger trg_subscriptions_sync_user_plan automatically updates
- * users.current_plan_status → 'active'.
+ *   1. Updates users.current_plan_status → 'active' for 30 days.
+ *   2. Marks the payment as paid.
  */
 export async function activateSubscription(
   db: DbPool,
@@ -60,29 +56,14 @@ export async function activateSubscription(
     amountKzt: number;
   },
 ): Promise<void> {
-  // Close previous subscription
+  // Activate subscription directly on users table
   await db`
-    UPDATE public.subscriptions
-       SET is_current = false
-     WHERE user_id = ${params.userId}
-       AND is_current = true
-  `;
-
-  // Insert new active subscription (30 days)
-  await db`
-    INSERT INTO public.subscriptions
-      (user_id, plan_code, status, is_current, paid_from, paid_until, payment_provider, payment_reference, auto_renew)
-    VALUES (
-      ${params.userId},
-      'monthly_kzt_1490',
-      'active',
-      true,
-      now(),
-      now() + interval '30 days',
-      ${params.provider},
-      ${params.invoiceId},
-      false
-    )
+    UPDATE public.users
+       SET current_plan_status = 'active',
+           current_period_end  = now() + interval '30 days',
+           grace_period_end    = NULL,
+           updated_at          = now()
+     WHERE id = ${params.userId}
   `;
 
   // Mark payment as paid
@@ -97,37 +78,39 @@ export async function activateSubscription(
 
 /**
  * Returns the current subscription end date and status for a user.
- * - trial: end date is trial_end_at
- * - active: end date is paid_until
- * - grace: end date is paid_until + 3 days (when access fully cuts off)
- * Returns null if no current subscription found.
+ * - trial: end date is current_period_end
+ * - active: end date is current_period_end
+ * - grace: end date is grace_period_end
+ * Returns null if no relevant data found.
  */
 export async function getCurrentSubscriptionInfo(
   db: DbPool,
   userId: string,
 ): Promise<{ endDate: Date; status: string } | null> {
-  const rows = await db<{ status: string; trial_end_at: string | null; paid_until: string | null }[]>`
-    SELECT status, trial_end_at, paid_until
-      FROM public.subscriptions
-     WHERE user_id    = ${userId}
-       AND is_current = true
+  const rows = await db<{
+    current_plan_status: string;
+    current_period_end: string | null;
+    grace_period_end: string | null;
+  }[]>`
+    SELECT current_plan_status, current_period_end, grace_period_end
+      FROM public.users
+     WHERE id = ${userId}
      LIMIT 1
   `;
   const row = rows[0];
   if (!row) return null;
 
+  const status = row.current_plan_status;
   let endDate: Date | null = null;
-  if (row.status === 'trial' && row.trial_end_at) {
-    endDate = new Date(row.trial_end_at);
-  } else if (row.status === 'grace' && row.paid_until) {
-    // grace period = 3 days after paid_until
-    endDate = new Date(new Date(row.paid_until).getTime() + 3 * 24 * 60 * 60 * 1000);
-  } else if (row.paid_until) {
-    endDate = new Date(row.paid_until);
+
+  if (status === 'grace' && row.grace_period_end) {
+    endDate = new Date(row.grace_period_end);
+  } else if (row.current_period_end) {
+    endDate = new Date(row.current_period_end);
   }
 
   if (!endDate) return null;
-  return { endDate, status: row.status };
+  return { endDate, status };
 }
 
 /**

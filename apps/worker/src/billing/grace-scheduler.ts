@@ -20,12 +20,13 @@ async function findUsersNeedingGraceReminder(db: DbPool): Promise<GraceUser[]> {
       GREATEST(
         0,
         CEIL(
-          EXTRACT(EPOCH FROM (s.paid_until + interval '3 days' - now())) / 86400
+          EXTRACT(EPOCH FROM (u.grace_period_end - now())) / 86400
         )::int
       )                                                                 AS "daysLeft"
     FROM public.users u
-    JOIN public.subscriptions s ON s.user_id = u.id AND s.is_current = true
-    WHERE s.status = 'grace'
+    WHERE u.current_plan_status = 'grace'
+      AND u.grace_period_end IS NOT NULL
+      AND u.grace_period_end > now()
       AND u.is_active = true
       AND EXTRACT(HOUR FROM now() AT TIME ZONE COALESCE(NULLIF(u.timezone, ''), 'UTC')) >= 9
       AND NOT EXISTS (

@@ -15,10 +15,10 @@ async function findUsersNeedingTrialExpiryReminder(db: DbPool): Promise<TrialUse
   return db<TrialUser[]>`
     SELECT u.id::text AS "userId"
       FROM public.users u
-      JOIN public.subscriptions s ON s.user_id = u.id AND s.is_current = true
-     WHERE s.status = 'trial'
-       AND s.trial_end_at IS NOT NULL
-       AND s.trial_end_at <= now() + interval '1 day'
+     WHERE u.current_plan_status = 'trial'
+       AND u.current_period_end IS NOT NULL
+       AND u.current_period_end <= now() + interval '1 day'
+       AND u.current_period_end > now()
        AND u.is_active = true
        AND EXTRACT(HOUR FROM now() AT TIME ZONE COALESCE(NULLIF(u.timezone, ''), 'UTC')) >= 9
        AND NOT EXISTS (

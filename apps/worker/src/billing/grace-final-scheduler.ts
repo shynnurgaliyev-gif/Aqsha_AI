@@ -16,10 +16,10 @@ async function findUsersNeedingGraceFinalReminder(db: DbPool): Promise<GraceFina
   return db<GraceFinalUser[]>`
     SELECT u.id::text AS "userId"
       FROM public.users u
-      JOIN public.subscriptions s ON s.user_id = u.id AND s.is_current = true
-     WHERE s.status = 'grace'
-       AND s.paid_until IS NOT NULL
-       AND s.paid_until + interval '3 days' <= now() + interval '1 day'
+     WHERE u.current_plan_status = 'grace'
+       AND u.grace_period_end IS NOT NULL
+       AND u.grace_period_end <= now() + interval '1 day'
+       AND u.grace_period_end > now()
        AND u.is_active = true
        AND EXTRACT(HOUR FROM now() AT TIME ZONE COALESCE(NULLIF(u.timezone, ''), 'UTC')) >= 9
        AND NOT EXISTS (
