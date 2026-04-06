@@ -59,8 +59,7 @@ export const HELP_MESSAGE = `📖 *Справка по командам Aqsha*
 «Удалить последнюю запись»
 «Очистить историю» — удалить все операции
 
-━━━━━━━━━━━━━━━━━━━━━━
-💡 Бот понимает свободный текст — пиши как обычно!`;
+━━━━━━━━━━━━━━━━━━━━━━`;
 
 /** Returns true if the message is a help request. */
 export function matchHelpCommand(text: string): boolean {
