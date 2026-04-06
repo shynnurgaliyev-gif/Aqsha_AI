@@ -96,23 +96,38 @@ export async function activateSubscription(
 }
 
 /**
- * Returns the current active/trial subscription end date for a user.
+ * Returns the current subscription end date and status for a user.
+ * - trial: end date is trial_end_at
+ * - active: end date is paid_until
+ * - grace: end date is paid_until + 3 days (when access fully cuts off)
  * Returns null if no current subscription found.
  */
-export async function getCurrentSubscriptionEndDate(
+export async function getCurrentSubscriptionInfo(
   db: DbPool,
   userId: string,
-): Promise<Date | null> {
-  const rows = await db<{ paid_until: string }[]>`
-    SELECT paid_until
+): Promise<{ endDate: Date; status: string } | null> {
+  const rows = await db<{ status: string; trial_end_at: string | null; paid_until: string | null }[]>`
+    SELECT status, trial_end_at, paid_until
       FROM public.subscriptions
-     WHERE user_id   = ${userId}
+     WHERE user_id    = ${userId}
        AND is_current = true
      LIMIT 1
   `;
   const row = rows[0];
   if (!row) return null;
-  return new Date(row.paid_until);
+
+  let endDate: Date | null = null;
+  if (row.status === 'trial' && row.trial_end_at) {
+    endDate = new Date(row.trial_end_at);
+  } else if (row.status === 'grace' && row.paid_until) {
+    // grace period = 3 days after paid_until
+    endDate = new Date(new Date(row.paid_until).getTime() + 3 * 24 * 60 * 60 * 1000);
+  } else if (row.paid_until) {
+    endDate = new Date(row.paid_until);
+  }
+
+  if (!endDate) return null;
+  return { endDate, status: row.status };
 }
 
 /**

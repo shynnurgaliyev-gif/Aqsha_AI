@@ -75,14 +75,34 @@ export const TEST_ACTIVATED =
   `🧪 Тестовый режим: подписка активирована на 30 дней!\n\n` +
   `В продакшне здесь будет реальный Kaspi счёт.`;
 
-/** Shown when user already has an active subscription */
-export function SUBSCRIPTION_ACTIVE(daysLeft: number, endDate: Date): string {
+/** Shown when user types "подписка" and already has an active/trial/grace sub */
+export function SUBSCRIPTION_ACTIVE(daysLeft: number, endDate: Date, status: string): string {
   const dateStr = endDate.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  if (status === 'trial') {
+    return (
+      `🎁 У вас активен бесплатный пробный период!\n\n` +
+      `📅 Заканчивается: ${dateStr}\n` +
+      `⏳ Осталось дней: ${daysLeft}\n\n` +
+      `За день до окончания бот напомнит об оплате.`
+    );
+  }
+
+  if (status === 'grace') {
+    return (
+      `⚠️ Подписка истекла, но у вас есть льготный период.\n\n` +
+      `📅 Доступ закроется: ${dateStr}\n` +
+      `⏳ Осталось дней: ${daysLeft}\n\n` +
+      `Оплатите сейчас, чтобы не потерять доступ.`
+    );
+  }
+
+  // active
   return (
     `✅ У вас активная подписка Aqsha AI!\n\n` +
     `📅 Действует до: ${dateStr}\n` +
     `⏳ Осталось дней: ${daysLeft}\n\n` +
-    `Когда подписка закончится — бот напомнит об оплате.`
+    `Бот напомнит об оплате когда подходит срок.`
   );
 }
 

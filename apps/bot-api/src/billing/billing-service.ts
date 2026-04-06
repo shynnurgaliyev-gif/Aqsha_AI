@@ -8,7 +8,7 @@ import {
   activateSubscription,
   saveUserPhone,
   getUserPhone,
-  getCurrentSubscriptionEndDate,
+  getCurrentSubscriptionInfo,
 } from './billing-repository';
 import { setPendingBillingPhone, clearPendingBillingPhone, getPendingBillingPhone } from './billing-session';
 import {
@@ -55,11 +55,11 @@ export async function handleBillingCommand(
   const hasActiveSub = planStatus === 'active' || planStatus === 'trial' || planStatus === 'grace';
 
   if (hasActiveSub) {
-    const endDate = await getCurrentSubscriptionEndDate(db, userId);
-    if (endDate) {
-      const msLeft = endDate.getTime() - Date.now();
+    const info = await getCurrentSubscriptionInfo(db, userId);
+    if (info) {
+      const msLeft = info.endDate.getTime() - Date.now();
       const daysLeft = Math.max(0, Math.ceil(msLeft / (1000 * 60 * 60 * 24)));
-      return { text: SUBSCRIPTION_ACTIVE(daysLeft, endDate) };
+      return { text: SUBSCRIPTION_ACTIVE(daysLeft, info.endDate, info.status) };
     }
   }
 
