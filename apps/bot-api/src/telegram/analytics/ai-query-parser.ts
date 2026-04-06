@@ -18,13 +18,24 @@ Return {"result": null} when:
 Rules:
 - query_type: what the user wants to know
   - "balance": current net balance / how much money is left
-  - "expense_total": total amount spent
-  - "income_total": total amount received
-  - "category_breakdown": spending or income broken down by category
+  - "expense_total": total amount spent overall (NO specific category mentioned)
+  - "income_total": total amount received overall (NO specific category mentioned)
+  - "category_breakdown": spending or income for a SPECIFIC category, or breakdown across all categories
   - "recent_transactions": list of recent transactions
+- CRITICAL: if the user mentions a specific category (food, transport, rent, еда, транспорт, etc.), ALWAYS use "category_breakdown" — never "expense_total" or "income_total"
 - period: time frame the user is asking about; null if no specific period is mentioned
-- kind: "expense" or "income" where relevant; null if not applicable or unclear
-- category: specific category name if the user mentions one (e.g. "food", "еда"); null if none mentioned
+- kind: "expense" or "income" where relevant; for spending/потратил/расход → "expense"; for income/заработал/доход → "income"; null if unclear
+- category: the specific category name the user mentions (e.g. "еда", "транспорт", "кафе"); null if no specific category
+
+Examples:
+- "сколько потратил на еду" → {"query_type":"category_breakdown","period":null,"kind":"expense","category":"еда"}
+- "расходы на транспорт за месяц" → {"query_type":"category_breakdown","period":"current_month","kind":"expense","category":"транспорт"}
+- "еда за этот месяц" → {"query_type":"category_breakdown","period":"current_month","kind":"expense","category":"еда"}
+- "транспорт за этот месяц" → {"query_type":"category_breakdown","period":"current_month","kind":"expense","category":"транспорт"}
+- "сколько я потратил на транспорт" → {"query_type":"category_breakdown","period":null,"kind":"expense","category":"транспорт"}
+- "расход еда" → {"query_type":"category_breakdown","period":null,"kind":"expense","category":"еда"}
+- "общие расходы за месяц" → {"query_type":"expense_total","period":"current_month","kind":"expense","category":null}
+- "сколько потратил" → {"query_type":"expense_total","period":null,"kind":"expense","category":null}
 - if in doubt, return {"result": null}`;
 
 type AiPeriod = AnalyticsPeriod | null;
