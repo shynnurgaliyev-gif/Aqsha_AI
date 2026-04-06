@@ -6,7 +6,7 @@ import { parseIntakeText } from './parser';
 import type { IntakeKind, ParsedIntake } from './parser';
 import { parseBulkInput } from './bulk-parser';
 import { parseWithAi } from './ai-parser';
-import { resolveCategory } from './category-resolver';
+import { resolveCategory, saveAliasIfNew, normalizeCandidate } from './category-resolver';
 import type { ResolvedCategory } from './category-resolver';
 import {
   getPendingDraft, setPendingDraft, clearPendingDraft,
@@ -226,11 +226,16 @@ export async function handleTextMessage(
   // If deterministic parse found a transaction but the category is unknown,
   // let the AI remap it to a canonical category (e.g. "депозит" → "Прочее").
   if (parsed && !category) {
-    logger.info({ userId, candidate: parsed.categoryCandidate }, 'Text intake: category not found, retrying with AI');
+    const originalCandidate = parsed.categoryCandidate;
+    logger.info({ userId, candidate: originalCandidate }, 'Text intake: category not found, retrying with AI');
     parsed = await parseWithAi(text, env.OPENAI_API_KEY, env.OPENAI_MODEL, logger);
     category = parsed
       ? await resolveWithCache(db, userId, parsed.kind, parsed.categoryCandidate)
       : null;
+    // Auto-save original candidate as alias so next time it resolves without AI
+    if (category && normalizeCandidate(originalCandidate) !== normalizeCandidate(category.name)) {
+      saveAliasIfNew(db, category.id, originalCandidate);
+    }
   }
 
   // If deterministic parse returned nothing, try AI parse from scratch.
@@ -238,7 +243,12 @@ export async function handleTextMessage(
     parsed = await parseWithAi(text, env.OPENAI_API_KEY, env.OPENAI_MODEL, logger);
     if (parsed) {
       logger.info({ userId, kind: parsed.kind, amount: parsed.amount }, 'Text intake: AI parse used');
-      category = await resolveWithCache(db, userId, parsed.kind, parsed.categoryCandidate);
+      const originalCandidate = parsed.categoryCandidate;
+      category = await resolveWithCache(db, userId, parsed.kind, originalCandidate);
+      // Auto-save original candidate as alias so next time it resolves without AI
+      if (category && normalizeCandidate(originalCandidate) !== normalizeCandidate(category.name)) {
+        saveAliasIfNew(db, category.id, originalCandidate);
+      }
     }
   }
 

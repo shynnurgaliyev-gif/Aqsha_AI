@@ -1,5 +1,5 @@
 import type { DbPool } from '@aqsha-ai/database';
-import type { ResolvedCategory } from './category-resolver';
+import { normalizeCandidate, type ResolvedCategory } from './category-resolver';
 import type { IntakeKind } from './parser';
 
 /**
@@ -12,7 +12,7 @@ export async function getCategoryHint(
   candidate: string,
   kind: IntakeKind,
 ): Promise<ResolvedCategory | null> {
-  const key = candidate.toLowerCase().trim();
+  const key = normalizeCandidate(candidate);
   const rows = await db<{ id: string; name: string }[]>`
     SELECT category_id::text AS id, category_name AS name
     FROM public.category_hints
@@ -38,7 +38,7 @@ export async function setCategoryHint(
   categoryId: string,
   categoryName: string,
 ): Promise<void> {
-  const key = candidate.toLowerCase().trim();
+  const key = normalizeCandidate(candidate);
   await db`
     INSERT INTO public.category_hints (user_id, candidate, kind, category_id, category_name)
     VALUES (${userId}::uuid, ${key}, ${kind}, ${categoryId}::uuid, ${categoryName})
