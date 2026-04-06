@@ -8,12 +8,6 @@ export type CorrectionCommandType = 'show_recent' | 'delete_last';
  */
 const SHOW_RECENT_TOKENS = new Set([
   'мои последние операции',
-  'исправить последнюю запись',
-  'исправить последнюю операцию',
-  'исправить последнее',
-  'исправь последнюю запись',
-  'исправь последнюю операцию',
-  'исправь последнее',
   'recent transactions',
 ]);
 
