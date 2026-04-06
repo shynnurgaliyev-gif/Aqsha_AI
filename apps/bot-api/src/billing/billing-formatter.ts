@@ -75,6 +75,17 @@ export const TEST_ACTIVATED =
   `🧪 Тестовый режим: подписка активирована на 30 дней!\n\n` +
   `В продакшне здесь будет реальный Kaspi счёт.`;
 
+/** Shown when user already has an active subscription */
+export function SUBSCRIPTION_ACTIVE(daysLeft: number, endDate: Date): string {
+  const dateStr = endDate.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+  return (
+    `✅ У вас активная подписка Aqsha AI!\n\n` +
+    `📅 Действует до: ${dateStr}\n` +
+    `⏳ Осталось дней: ${daysLeft}\n\n` +
+    `Когда подписка закончится — бот напомнит об оплате.`
+  );
+}
+
 /** Shown on day 1 of grace period */
 export function GRACE_REMINDER(daysLeft: number): string {
   return (

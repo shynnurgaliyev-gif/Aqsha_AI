@@ -8,11 +8,13 @@ import {
   activateSubscription,
   saveUserPhone,
   getUserPhone,
+  getCurrentSubscriptionEndDate,
 } from './billing-repository';
 import { setPendingBillingPhone, clearPendingBillingPhone, getPendingBillingPhone } from './billing-session';
 import {
   SUBSCRIPTION_INFO,
   SUBSCRIPTION_INFO_KEYBOARD,
+  SUBSCRIPTION_ACTIVE,
   PAYWALL_TEXT,
   PAYWALL_KEYBOARD,
   ASK_PHONE,
@@ -38,16 +40,29 @@ function normalisePhone(raw: string): string | null {
 
 /**
  * Called when user sends "оплатить", "подписка", etc.
- * Returns the subscription info card with the "Оплатить" button.
+ * - active/trial/grace → shows remaining days instead of payment screen.
+ * - expired/blocked/canceled/pending → shows payment screen.
  */
 export async function handleBillingCommand(
-  _userId: string,
-  _planStatus: string,
-  _db: DbPool,
+  userId: string,
+  planStatus: string,
+  db: DbPool,
   env: AppEnv,
   logger: FastifyBaseLogger,
 ): Promise<BotMessage> {
-  logger.info({ provider: env.BILLING_PROVIDER }, 'Billing command triggered');
+  logger.info({ provider: env.BILLING_PROVIDER, planStatus }, 'Billing command triggered');
+
+  const hasActiveSub = planStatus === 'active' || planStatus === 'trial' || planStatus === 'grace';
+
+  if (hasActiveSub) {
+    const endDate = await getCurrentSubscriptionEndDate(db, userId);
+    if (endDate) {
+      const msLeft = endDate.getTime() - Date.now();
+      const daysLeft = Math.max(0, Math.ceil(msLeft / (1000 * 60 * 60 * 24)));
+      return { text: SUBSCRIPTION_ACTIVE(daysLeft, endDate) };
+    }
+  }
+
   return {
     text: SUBSCRIPTION_INFO,
     reply_markup: SUBSCRIPTION_INFO_KEYBOARD(env.KASPI_TEST_MODE),

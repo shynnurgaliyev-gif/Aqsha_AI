@@ -96,6 +96,26 @@ export async function activateSubscription(
 }
 
 /**
+ * Returns the current active/trial subscription end date for a user.
+ * Returns null if no current subscription found.
+ */
+export async function getCurrentSubscriptionEndDate(
+  db: DbPool,
+  userId: string,
+): Promise<Date | null> {
+  const rows = await db<{ paid_until: string }[]>`
+    SELECT paid_until
+      FROM public.subscriptions
+     WHERE user_id   = ${userId}
+       AND is_current = true
+     LIMIT 1
+  `;
+  const row = rows[0];
+  if (!row) return null;
+  return new Date(row.paid_until);
+}
+
+/**
  * Saves the user's phone number for future Kaspi Pay invoices.
  */
 export async function saveUserPhone(db: DbPool, userId: string, phone: string): Promise<void> {
