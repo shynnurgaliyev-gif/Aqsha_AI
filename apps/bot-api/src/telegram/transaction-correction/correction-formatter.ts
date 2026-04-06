@@ -4,34 +4,44 @@ import type { PendingCorrectionState } from './correction-edit-session';
 import type { PendingBulkDeleteState } from './correction-bulk-delete-session';
 
 function formatAmount(amount: number): string {
-  return amount.toLocaleString('ru-RU') + ' ₸';
+  return amount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0') + ' ₸';
+}
+
+/** DD.MM.YYYY from YYYY-MM-DD */
+function fmtDate(d: string): string {
+  return `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`;
 }
 
 /**
  * Compact numbered list of recent transactions for correction context.
- * Includes a hint about the delete command.
+ * Includes hints for all correction actions (amount, category, delete).
  */
 export function formatRecentForCorrection(rows: CorrectionTransactionRow[]): string {
   if (rows.length === 0) {
     return 'Операций пока нет.';
   }
   const lines = rows.map((r, i) => {
-    const sign = r.kind === 'income' ? '+' : '-';
-    return `${i + 1}. ${sign}${formatAmount(r.amount)} ${r.categoryName} (${r.transactionDateLocal})`;
+    const emoji = r.kind === 'income' ? '📥' : '📤';
+    return `${i + 1}. ${emoji} ${r.categoryName} — ${formatAmount(r.amount)} (${fmtDate(r.transactionDateLocal)})`;
   });
-  return `Последние операции:\n${lines.join('\n')}\n\nДля удаления последней: «удалить последнюю операцию»`;
+  return (
+    `📋 Последние операции:\n\n${lines.join('\n')}\n\n` +
+    `Исправить сумму: «исправь сумму на 500»\n` +
+    `Сменить категорию: «исправь категорию на Транспорт»\n` +
+    `Удалить последнюю: «удалить последнюю операцию»`
+  );
 }
 
 /**
  * Confirmation prompt shown before a delete is executed.
  */
 export function formatDeletePrompt(tx: CorrectionTransactionRow): string {
-  const sign = tx.kind === 'income' ? '+' : '-';
+  const emoji = tx.kind === 'income' ? '📥' : '📤';
   const kindLabel = tx.kind === 'income' ? 'Доход' : 'Расход';
   return (
-    `Удалить операцию?\n\n` +
-    `${kindLabel}: ${sign}${formatAmount(tx.amount)} — ${tx.categoryName} (${tx.transactionDateLocal})\n\n` +
-    `Подтвердить: да / нет`
+    `🗑 Удалить операцию?\n\n` +
+    `${emoji} ${kindLabel}: ${formatAmount(tx.amount)} — ${tx.categoryName} (${fmtDate(tx.transactionDateLocal)})\n\n` +
+    `Подтверди: да / нет`
   );
 }
 
@@ -39,9 +49,9 @@ export function formatDeletePrompt(tx: CorrectionTransactionRow): string {
  * Success message shown after a transaction is soft-deleted.
  */
 export function formatDeleteSuccess(state: PendingDeleteState): string {
-  const sign = state.kind === 'income' ? '+' : '-';
+  const emoji = state.kind === 'income' ? '📥' : '📤';
   const kindLabel = state.kind === 'income' ? 'Доход' : 'Расход';
-  return `✓ Удалено: ${kindLabel} ${sign}${formatAmount(state.amount)} — ${state.categoryName} (${state.transactionDateLocal}).`;
+  return `✅ Удалено: ${emoji} ${kindLabel} ${formatAmount(state.amount)} — ${state.categoryName} (${fmtDate(state.transactionDateLocal)})`;
 }
 
 /** Shown when the user cancels a pending delete. */
@@ -67,12 +77,12 @@ export function formatCorrectionAmountPrompt(
   tx: CorrectionTransactionRow,
   newAmount: number,
 ): string {
-  const sign = tx.kind === 'income' ? '+' : '-';
+  const emoji = tx.kind === 'income' ? '📥' : '📤';
   return (
-    `Исправить сумму?\n\n` +
-    `Было:   ${sign}${formatAmount(tx.amount)} — ${tx.categoryName} (${tx.transactionDateLocal})\n` +
-    `Станет: ${sign}${formatAmount(newAmount)} — ${tx.categoryName} (${tx.transactionDateLocal})\n\n` +
-    `Подтвердить: да / нет`
+    `✏️ Исправить сумму?\n\n` +
+    `Было:   ${emoji} ${formatAmount(tx.amount)} — ${tx.categoryName} (${fmtDate(tx.transactionDateLocal)})\n` +
+    `Станет: ${emoji} ${formatAmount(newAmount)} — ${tx.categoryName} (${fmtDate(tx.transactionDateLocal)})\n\n` +
+    `Подтверди: да / нет`
   );
 }
 
@@ -83,12 +93,12 @@ export function formatCorrectionCategoryPrompt(
   tx: CorrectionTransactionRow,
   newCategoryName: string,
 ): string {
-  const sign = tx.kind === 'income' ? '+' : '-';
+  const emoji = tx.kind === 'income' ? '📥' : '📤';
   return (
-    `Исправить категорию?\n\n` +
-    `Было:   ${sign}${formatAmount(tx.amount)} — ${tx.categoryName} (${tx.transactionDateLocal})\n` +
-    `Станет: ${sign}${formatAmount(tx.amount)} — ${newCategoryName} (${tx.transactionDateLocal})\n\n` +
-    `Подтвердить: да / нет`
+    `✏️ Сменить категорию?\n\n` +
+    `Было:   ${emoji} ${formatAmount(tx.amount)} — ${tx.categoryName} (${fmtDate(tx.transactionDateLocal)})\n` +
+    `Станет: ${emoji} ${formatAmount(tx.amount)} — ${newCategoryName} (${fmtDate(tx.transactionDateLocal)})\n\n` +
+    `Подтверди: да / нет`
   );
 }
 
@@ -97,10 +107,10 @@ export function formatCorrectionCategoryPrompt(
  * Renders using the new (post-update) values from the pending state.
  */
 export function formatCorrectionSuccess(state: PendingCorrectionState): string {
-  const sign = state.kind === 'income' ? '+' : '-';
+  const emoji = state.kind === 'income' ? '📥' : '📤';
   const amount = state.field === 'amount' ? (state.newAmount ?? state.currentAmount) : state.currentAmount;
   const category = state.field === 'category' ? (state.newCategoryName ?? state.currentCategoryName) : state.currentCategoryName;
-  return `✓ Исправлено: ${sign}${formatAmount(amount)} — ${category} (${state.transactionDateLocal}).`;
+  return `✅ Исправлено: ${emoji} ${formatAmount(amount)} — ${category} (${fmtDate(state.transactionDateLocal)})`;
 }
 
 /** Shown when user sends non-да/нет text while a correction is pending. */
