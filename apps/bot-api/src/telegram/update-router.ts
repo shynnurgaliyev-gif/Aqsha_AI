@@ -16,6 +16,7 @@ import { handleRecurringCommand } from './recurring/recurring-handler';
 import { findRecurringExpenseById, insertTransactionFromRecurring } from './recurring/recurring-repository';
 import { formatRecurringConfirmed } from './recurring/recurring-formatter';
 import { handleCorrectionFlow, handleBulkDeleteCallback } from './transaction-correction/correction-handler';
+import { handleResetFlow } from './reset/reset-handler';
 import { handleTextMessage, CONFIRMATION_KEYBOARD } from './text-intake/handler';
 import { handleVoiceMessage } from './voice-intake/handler';
 import { handleAnalyticsQuery } from './analytics/handler';
@@ -151,6 +152,12 @@ export async function routeTelegramUpdate(
               } else {
             // Correction flow: handles pending state confirmation and correction commands.
             // Returns null to fall through to text intake when nothing matches.
+            const resetResponse = await handleResetFlow(msg.text ?? '', userId, db, logger);
+            if (resetResponse !== null) {
+              logger.info({ updateId: update.update_id }, 'Reset flow handled');
+              await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: resetResponse }, logger);
+            } else {
+
             const correctionResponse = await handleCorrectionFlow(msg.text ?? '', userId, db, logger);
 
             if (correctionResponse !== null) {
@@ -201,6 +208,7 @@ export async function routeTelegramUpdate(
             }
           }
         }
+        } // end reset else
       }
       break;
     }
