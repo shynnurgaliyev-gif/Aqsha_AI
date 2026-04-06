@@ -22,14 +22,35 @@ function parseImplicitExpense(line: string): ParsedIntake | null {
 }
 
 /**
- * Splits a message into individual lines by comma or newline.
- * Filters out empty parts.
+ * Splits a message into individual transaction strings.
+ *
+ * Strategy 1: comma or newline delimiter — "Еда 300, транспорт 400"
+ * Strategy 2: space-separated "Cat Amount Cat Amount" pattern —
+ *             "Еда 300 машина 400" → ["Еда 300", "машина 400"]
+ *
+ * Strategy 2 is tried only when strategy 1 produces fewer than 2 parts.
+ * It works by repeatedly matching the pattern (letters) (digits) from left to right.
  */
 function splitBulkInput(text: string): string[] {
-  return text
+  // Strategy 1: explicit delimiter
+  const byDelimiter = text
     .split(/[,\n]+/)
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
+
+  if (byDelimiter.length >= 2) return byDelimiter;
+
+  // Strategy 2: extract "word(s) number" pairs from a single space-separated line.
+  // Regex matches a run of letters/spaces (non-greedy, stops before a digit run).
+  // Example: "Еда 300 машина 400" → ["Еда 300", "машина 400"]
+  const pairs: string[] = [];
+  const re = /([a-zа-яёA-ZА-ЯЁ][a-zа-яёA-ZА-ЯЁ]*(?:\s+[a-zа-яёA-ZА-ЯЁ][a-zа-яёA-ZА-ЯЁ]*)*)\s+(\d+)/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(text)) !== null) {
+    pairs.push(`${match[1]!.trim()} ${match[2]}`);
+  }
+
+  return pairs.length >= 2 ? pairs : byDelimiter;
 }
 
 /**

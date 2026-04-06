@@ -176,13 +176,24 @@ export async function handleTextMessage(
         return `${emoji} ${i.categoryName} — ${fmt(i.amount)} ₸`;
       });
       const failNote = failedLines.length > 0
-        ? `\n\n⚠️ Не найдены категории: ${failedLines.join(', ')}`
+        ? `\n\n⚠️ Категории не найдены, пропущены: ${failedLines.join(', ')}`
         : '';
 
       return {
         kind: 'bulk_confirmation_prompt',
         message: `Подтверждаешь ${resolvedItems.length} записи на ${fmt(total)} ₸?\n\n${lines.join('\n')}${failNote}`,
         items: resolvedItems,
+      };
+    }
+
+    // Bulk was detected but fewer than 2 categories resolved — show an error
+    // instead of silently falling through to single parse (which would ignore items).
+    if (failedLines.length > 0) {
+      logger.info({ userId, failed: failedLines }, 'Bulk parse: not enough categories resolved');
+      return {
+        kind: 'category_not_found',
+        message: `⚠️ Категории не найдены: ${failedLines.join(', ')}\n\nНапиши «расходы по категориям» чтобы посмотреть список доступных категорий.`,
+        candidate: failedLines.join(', '),
       };
     }
   }
