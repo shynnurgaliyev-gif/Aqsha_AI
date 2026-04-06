@@ -41,6 +41,29 @@ export function formatRecurringDeleted(description: string): string {
 
 export const RECURRING_NOT_FOUND = 'Регулярный расход не найден. Напиши «мои подписки» чтобы увидеть список.';
 
+export function formatRecurringDayPrompt(description: string, amount: number): string {
+  return (
+    `📅 Добавляю регулярный расход:\n\n` +
+    `📋 ${description} — ${fmt(amount)}\n\n` +
+    `В какое число месяца поставить напоминание?`
+  );
+}
+
+export const RECURRING_DAY_KEYBOARD = {
+  inline_keyboard: [
+    [
+      { text: '1-е',  callback_data: 'rec_day:1'  },
+      { text: '5-е',  callback_data: 'rec_day:5'  },
+      { text: '10-е', callback_data: 'rec_day:10' },
+    ],
+    [
+      { text: '15-е', callback_data: 'rec_day:15' },
+      { text: '20-е', callback_data: 'rec_day:20' },
+      { text: '25-е', callback_data: 'rec_day:25' },
+    ],
+  ],
+};
+
 export function formatRecurringReminderMessage(r: RecurringExpense): string {
   return (
     `🔔 Напоминание о регулярном расходе:\n\n` +
