@@ -1,6 +1,7 @@
 import type { FastifyBaseLogger } from 'fastify';
 import type { AppEnv } from '@aqsha-ai/config';
 import type { DbPool } from '@aqsha-ai/database';
+import type { InlineKeyboardMarkup } from '../telegram-client';
 import { matchRecurringCommand } from './recurring-command-matcher';
 import {
   createRecurringExpense,
@@ -22,7 +23,7 @@ import { resolveCategory } from '../text-intake/category-resolver';
 
 export interface RecurringHandlerResponse {
   text: string;
-  reply_markup?: object;
+  reply_markup?: InlineKeyboardMarkup;
 }
 
 /**

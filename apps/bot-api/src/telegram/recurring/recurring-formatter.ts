@@ -1,4 +1,5 @@
 import type { RecurringExpense } from './recurring-repository';
+import type { InlineKeyboardMarkup } from '../telegram-client';
 
 function fmt(amount: number): string {
   return amount.toLocaleString('ru-RU') + ' ₸';
@@ -49,7 +50,7 @@ export function formatRecurringDayPrompt(description: string, amount: number): s
   );
 }
 
-export const RECURRING_DAY_KEYBOARD = {
+export const RECURRING_DAY_KEYBOARD: InlineKeyboardMarkup = {
   inline_keyboard: [
     [
       { text: '1-е',  callback_data: 'rec_day:1'  },
