@@ -53,6 +53,8 @@ const ANALYTICS_TOKENS = new Map<string, AnalyticsQuery>([
 
   // ── Expense totals ────────────────────────────────────────────────────────
   ['расходы за месяц', { type: 'expense_categories', period: 'current_month' }],
+  ['расходы за этот месяц', { type: 'expense_categories', period: 'current_month' }],
+  ['расходы этого месяца', { type: 'expense_categories', period: 'current_month' }],
   ['расходы', { type: 'expense_categories', period: 'current_month' }],
   ['расходы сегодня', { type: 'expense_total', period: 'today' }],
   ['расходы за сегодня', { type: 'expense_total', period: 'today' }],
@@ -68,6 +70,8 @@ const ANALYTICS_TOKENS = new Map<string, AnalyticsQuery>([
 
   // ── Income totals ─────────────────────────────────────────────────────────
   ['доходы за месяц', { type: 'income_categories', period: 'current_month' }],
+  ['доходы за этот месяц', { type: 'income_categories', period: 'current_month' }],
+  ['доходы этого месяца', { type: 'income_categories', period: 'current_month' }],
   ['доходы', { type: 'income_categories', period: 'current_month' }],
   ['доходы сегодня', { type: 'income_total', period: 'today' }],
   ['доходы за сегодня', { type: 'income_total', period: 'today' }],
