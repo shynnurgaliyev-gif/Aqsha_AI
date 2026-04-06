@@ -15,9 +15,6 @@ import { matchExportCommand, parseExportCallback, EXPORT_PERIOD_KEYBOARD } from 
 import { handleExportRequest } from './export/export-handler';
 import { sendDocument } from './telegram-client';
 import { handleGoalCommand } from './goals/goal-handler';
-import { handleRecurringCommand, handleRecurringDayCallback, type RecurringHandlerResponse } from './recurring/recurring-handler';
-import { findRecurringExpenseById, insertTransactionFromRecurring } from './recurring/recurring-repository';
-import { formatRecurringConfirmed } from './recurring/recurring-formatter';
 import { handleCorrectionFlow, handleBulkDeleteCallback } from './transaction-correction/correction-handler';
 import { handleResetFlow } from './reset/reset-handler';
 import { handleTextMessage, CONFIRMATION_KEYBOARD } from './text-intake/handler';
@@ -96,27 +93,6 @@ async function dispatchText(
   if (goalResponse !== null) {
     logger.info({ userId }, 'Goal command handled');
     await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: goalResponse }, logger);
-    return;
-  }
-
-  // ── Recurring expense commands ───────────────────────────────────────────────
-  // Runs before analytics so deterministic tokens like "мои регулярные расходы"
-  // are not captured by the AI analytics fallback.
-  let recurringResponse: RecurringHandlerResponse | null = null;
-  try {
-    recurringResponse = await handleRecurringCommand(text, userId, db, env, logger);
-  } catch (err) {
-    logger.error({ err, userId }, 'Recurring command error');
-    await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: 'Не удалось выполнить команду. Попробуйте позже.' }, logger);
-    return;
-  }
-  if (recurringResponse !== null) {
-    logger.info({ userId }, 'Recurring command handled');
-    await sendMessage(env.TELEGRAM_BOT_TOKEN, {
-      chatId,
-      text: recurringResponse.text,
-      ...(recurringResponse.reply_markup ? { reply_markup: recurringResponse.reply_markup } : {}),
-    }, logger);
     return;
   }
 
@@ -390,39 +366,6 @@ export async function routeTelegramUpdate(
           const action = data === 'bulk_yes' ? 'yes' : 'no';
           const bulkResult = await handleBulkDeleteCallback(action, userId, db, logger);
           await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: bulkResult }, logger);
-        } else if (data?.startsWith('rec_yes:') || data?.startsWith('rec_no:')) {
-          // Recurring expense reminder confirmation.
-          const recurringId = data.split(':')[1];
-          if (recurringId) {
-            const recurring = await findRecurringExpenseById(db, recurringId);
-            if (!recurring || !recurring.isActive) {
-              await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: '⏱ Регулярный расход не найден или уже удалён.' }, logger);
-            } else if (data.startsWith('rec_yes:')) {
-              await insertTransactionFromRecurring(db, userId, recurring);
-              logger.info({ updateId: update.update_id, userId, recurringId }, 'Recurring expense confirmed and transaction inserted');
-              await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: formatRecurringConfirmed(recurring) }, logger);
-              try {
-                const budgetStatus = await getBudgetStatus(db, userId, recurring.categoryId);
-                if (budgetStatus && budgetStatus.remaining < 0) {
-                  await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: formatBudgetAlert(budgetStatus) }, logger);
-                }
-              } catch (err) {
-                logger.warn({ err }, 'Budget alert check failed after recurring confirm — skipping');
-              }
-            } else {
-              logger.info({ updateId: update.update_id, userId, recurringId }, 'Recurring expense reminder skipped');
-              await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: '❌ Пропущено. Напомню в следующем месяце.' }, logger);
-            }
-          }
-        } else if (data?.startsWith('rec_day:')) {
-          const dayStr = data.slice('rec_day:'.length);
-          const day = parseInt(dayStr, 10);
-          if (!isNaN(day)) {
-            const recurringDayResult = await handleRecurringDayCallback(day, userId, db, env, logger);
-            if (recurringDayResult) {
-              await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: recurringDayResult }, logger);
-            }
-          }
         } else if (data && parseExportCallback(data) !== null) {
           const period = parseExportCallback(data)!;
           const exportResult = await handleExportRequest(userId, period, db, logger);

@@ -5,7 +5,6 @@ import { processJobs } from './job-queue/processor';
 import { runSubscriptionLifecycleCheck } from './subscriptions/lifecycle';
 import { runDailyRecommendationScheduler } from './daily-recommendations/scheduler';
 import { runWeeklyReportScheduler } from './weekly-reports/scheduler';
-import { runRecurringReminderScheduler } from './recurring-reminders/scheduler';
 import { runGraceReminderScheduler } from './billing/grace-scheduler';
 import { runTrialExpiryReminderScheduler } from './billing/trial-expiry-scheduler';
 import { runGraceFinalReminderScheduler } from './billing/grace-final-scheduler';
@@ -42,7 +41,6 @@ export function createWorker(env: AppEnv, db: DbPool): WorkerInstance {
       await runSubscriptionLifecycleCheck(db, logger);
       await runDailyRecommendationScheduler(db, logger);
       await runWeeklyReportScheduler(db, logger);
-      await runRecurringReminderScheduler(db, logger);
       await runGraceReminderScheduler(db, logger);
       await runTrialExpiryReminderScheduler(db, logger);
       await runGraceFinalReminderScheduler(db, logger);
