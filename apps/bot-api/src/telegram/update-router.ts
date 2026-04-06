@@ -30,6 +30,7 @@ import { getPendingDraft, clearPendingDraft, getPendingBulkDraft, clearPendingBu
 import { insertConfirmedTransaction, insertConfirmedBulkTransactions } from './text-intake/transaction-inserter';
 import { getBudgetStatus } from './budgets/budget-repository';
 import { formatBudgetAlert } from './budgets/budget-formatter';
+import { matchHelpCommand, ONBOARDING_MESSAGE, HELP_MESSAGE } from './help/help-formatter';
 
 /**
  * Routes an incoming Telegram update to the appropriate handler stub.
@@ -62,8 +63,7 @@ export async function routeTelegramUpdate(
         // ── /start command ─────────────────────────────────────────────────────
         // Treat /start as a greeting so the bot responds warmly, not with "unsupported".
         if (msg.text?.trim() === '/start') {
-          const { reply: welcome } = await handleChat('/start — пользователь только что открыл бота', [], env.OPENAI_API_KEY, env.OPENAI_MODEL, logger);
-          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: welcome }, logger);
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: ONBOARDING_MESSAGE }, logger);
           break;
         }
 
@@ -107,6 +107,12 @@ export async function routeTelegramUpdate(
             text: '📂 За какой период выгрузить историю?',
             reply_markup: EXPORT_PERIOD_KEYBOARD,
           }, logger);
+          break;
+        }
+
+        // ── Help command ───────────────────────────────────────────────────────
+        if (matchHelpCommand(msg.text ?? '')) {
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: HELP_MESSAGE }, logger);
           break;
         }
 
@@ -194,7 +200,8 @@ export async function routeTelegramUpdate(
                 const history = await getChatHistory(db, userId);
                 const { reply: chatReply, updatedHistory } = await handleChat(msg.text ?? '', history, env.OPENAI_API_KEY, env.OPENAI_MODEL, logger);
                 await setChatHistory(db, userId, updatedHistory);
-                await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: chatReply }, logger);
+                const replyWithHint = `${chatReply}\n\n💡 Напиши «помощь» — покажу все команды.`;
+                await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: replyWithHint }, logger);
               } else if (result.kind === 'bulk_confirmation_prompt') {
                 await sendMessage(env.TELEGRAM_BOT_TOKEN, {
                   chatId: msg.chat.id,
