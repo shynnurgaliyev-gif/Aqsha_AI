@@ -1,11 +1,13 @@
-export interface CreateGoalCommand  { type: 'create';      name: string; targetAmount: number; }
-export interface AddSavingsCommand  { type: 'add_savings';  nameQuery: string; amount: number; }
-export interface ListGoalsCommand   { type: 'list'; }
-export interface ShowGoalCommand    { type: 'show';         nameQuery: string; }
-export interface DeleteGoalCommand  { type: 'delete';       nameQuery: string; }
+export interface CreateGoalCommand        { type: 'create';           name: string; targetAmount: number; }
+export interface CreateGoalNoAmountCommand { type: 'create_no_amount'; name: string; }
+export interface AddSavingsCommand        { type: 'add_savings';       nameQuery: string; amount: number; }
+export interface ListGoalsCommand         { type: 'list'; }
+export interface ShowGoalCommand          { type: 'show';              nameQuery: string; }
+export interface DeleteGoalCommand        { type: 'delete';            nameQuery: string; }
 
 export type GoalCommand =
   | CreateGoalCommand
+  | CreateGoalNoAmountCommand
   | AddSavingsCommand
   | ListGoalsCommand
   | ShowGoalCommand
@@ -19,16 +21,19 @@ const LIST_TOKENS = new Set([
 const CREATE_PATTERNS: RegExp[] = [
   /^коплю\s+на\s+(.+)\s+(\d+)$/,
   /^создай\s+(?:цель|копилку)\s+(.+)\s+(\d+)$/,
+  /^создать\s+(?:цель|копилку)\s+(.+)\s+(\d+)$/,
   /^новая\s+(?:цель|копилка)\s+(.+)\s+(\d+)$/,
   /^(?:цель|копилка)\s+(.+)\s+(\d+)$/,
 ];
 
-// "отложил на iPhone 50000" | "пополнил iPhone 50000"
+// "отложил на iPhone 50000" | "пополнил iPhone 50000" | "добавить в цель iPhone 50000"
 const ADD_PATTERNS: RegExp[] = [
   /^отложил\s+(?:на\s+)?(.+)\s+(\d+)$/,
   /^откладываю\s+(?:на\s+)?(.+)\s+(\d+)$/,
   /^пополнил\s+(?:копилку\s+)?(.+)\s+(\d+)$/,
   /^добавил\s+(?:к\s+|в\s+)?(?:цели?\s+|копилку\s+)?(.+)\s+(\d+)$/,
+  /^добавить\s+(?:к\s+|в\s+)?(?:цели?\s+|копилку\s+)?(.+)\s+(\d+)$/,
+  /^добавь\s+(?:к\s+|в\s+)?(?:цели?\s+|копилку\s+)?(.+)\s+(\d+)$/,
 ];
 
 // "удали цель iPhone"
@@ -67,6 +72,18 @@ export function matchGoalCommand(text: string): GoalCommand | null {
   for (const p of DELETE_PATTERNS) {
     const m = t.match(p);
     if (m && m[1]) return { type: 'delete', nameQuery: m[1].trim() };
+  }
+
+  // "создать цель Отпуск" / "создай цель Отпуск" (without amount — ask for it)
+  const CREATE_NO_AMOUNT_PATTERNS: RegExp[] = [
+    /^(?:создать|создай|новая)\s+(?:цель|копилку)\s+(.+)$/,
+    /^коплю\s+на\s+(.+)$/,
+  ];
+  for (const p of CREATE_NO_AMOUNT_PATTERNS) {
+    const m = t.match(p);
+    if (m && m[1] && !/\d+$/.test(m[1].trim())) {
+      return { type: 'create_no_amount', name: m[1].trim() };
+    }
   }
 
   for (const p of SHOW_PATTERNS) {

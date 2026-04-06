@@ -44,6 +44,11 @@ export async function handleGoalCommand(
     return formatGoalList(goals);
   }
 
+  if (command.type === 'create_no_amount') {
+    logger.info({ userId, name: command.name }, 'Goal create without amount — prompting');
+    return `🎯 Отлично! Укажи целевую сумму для цели «${command.name}».\n\nНапример: «Создать цель ${command.name} 200000»`;
+  }
+
   if (command.type === 'create') {
     const result = await createGoal(db, userId, command.name, command.targetAmount);
     if (result === 'already_exists') {
