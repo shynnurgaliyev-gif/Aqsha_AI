@@ -29,7 +29,7 @@ export async function handleResetFlow(
   const pending = await getPendingReset(db, userId);
 
   if (pending) {
-    if (text.trim() === CONFIRM_WORD) {
+    if (text.trim().toUpperCase() === CONFIRM_WORD) {
       await clearPendingReset(db, userId);
       const count = await softDeleteAllTransactions(db, userId);
       logger.info({ userId, count }, 'User reset all transaction history');
