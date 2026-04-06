@@ -69,14 +69,6 @@ async function dispatchText(
     return;
   }
 
-  // ── Analytics ────────────────────────────────────────────────────────────────
-  const analyticsResponse = await handleAnalyticsQuery(text, userId, db, env, logger);
-  if (analyticsResponse !== null) {
-    logger.info({ userId }, 'Analytics query handled');
-    await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: analyticsResponse }, logger);
-    return;
-  }
-
   // ── Budget commands ──────────────────────────────────────────────────────────
   let budgetResponse: string | null = null;
   try {
@@ -108,6 +100,8 @@ async function dispatchText(
   }
 
   // ── Recurring expense commands ───────────────────────────────────────────────
+  // Runs before analytics so deterministic tokens like "мои регулярные расходы"
+  // are not captured by the AI analytics fallback.
   let recurringResponse: RecurringHandlerResponse | null = null;
   try {
     recurringResponse = await handleRecurringCommand(text, userId, db, env, logger);
@@ -123,6 +117,14 @@ async function dispatchText(
       text: recurringResponse.text,
       ...(recurringResponse.reply_markup ? { reply_markup: recurringResponse.reply_markup } : {}),
     }, logger);
+    return;
+  }
+
+  // ── Analytics ────────────────────────────────────────────────────────────────
+  const analyticsResponse = await handleAnalyticsQuery(text, userId, db, env, logger);
+  if (analyticsResponse !== null) {
+    logger.info({ userId }, 'Analytics query handled');
+    await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: analyticsResponse }, logger);
     return;
   }
 
