@@ -40,8 +40,7 @@ export function formatDeletePrompt(tx: CorrectionTransactionRow): string {
   const kindLabel = tx.kind === 'income' ? 'Доход' : 'Расход';
   return (
     `🗑 Удалить операцию?\n\n` +
-    `${emoji} ${kindLabel}: ${formatAmount(tx.amount)} — ${tx.categoryName} (${fmtDate(tx.transactionDateLocal)})\n\n` +
-    `Подтверди: да / нет`
+    `${emoji} ${kindLabel}: ${formatAmount(tx.amount)} — ${tx.categoryName} (${fmtDate(tx.transactionDateLocal)})`
   );
 }
 
@@ -81,8 +80,7 @@ export function formatCorrectionAmountPrompt(
   return (
     `✏️ Исправить сумму?\n\n` +
     `Было:   ${emoji} ${formatAmount(tx.amount)} — ${tx.categoryName} (${fmtDate(tx.transactionDateLocal)})\n` +
-    `Станет: ${emoji} ${formatAmount(newAmount)} — ${tx.categoryName} (${fmtDate(tx.transactionDateLocal)})\n\n` +
-    `Подтверди: да / нет`
+    `Станет: ${emoji} ${formatAmount(newAmount)} — ${tx.categoryName} (${fmtDate(tx.transactionDateLocal)})`
   );
 }
 
@@ -97,8 +95,7 @@ export function formatCorrectionCategoryPrompt(
   return (
     `✏️ Сменить категорию?\n\n` +
     `Было:   ${emoji} ${formatAmount(tx.amount)} — ${tx.categoryName} (${fmtDate(tx.transactionDateLocal)})\n` +
-    `Станет: ${emoji} ${formatAmount(tx.amount)} — ${newCategoryName} (${fmtDate(tx.transactionDateLocal)})\n\n` +
-    `Подтверди: да / нет`
+    `Станет: ${emoji} ${formatAmount(tx.amount)} — ${newCategoryName} (${fmtDate(tx.transactionDateLocal)})`
   );
 }
 

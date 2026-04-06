@@ -69,6 +69,20 @@ export const BULK_DELETE_KEYBOARD: CorrectionWithKeyboard['reply_markup'] = {
   ]],
 };
 
+export const DEL_KEYBOARD: CorrectionWithKeyboard['reply_markup'] = {
+  inline_keyboard: [[
+    { text: '✅ Да, удалить', callback_data: 'del_yes' },
+    { text: '❌ Отмена',      callback_data: 'del_no'  },
+  ]],
+};
+
+export const CORR_KEYBOARD: CorrectionWithKeyboard['reply_markup'] = {
+  inline_keyboard: [[
+    { text: '✅ Применить', callback_data: 'corr_yes' },
+    { text: '❌ Отмена',    callback_data: 'corr_no'  },
+  ]],
+};
+
 /**
  * Handles transaction correction commands, pending delete confirmation,
  * and pending correction (amount / category) confirmation.
@@ -243,7 +257,7 @@ export async function handleCorrectionFlow(
     });
 
     logger.info({ userId, transactionId: last.id }, 'Pending delete set');
-    return formatDeletePrompt(last);
+    return { message: formatDeletePrompt(last), reply_markup: DEL_KEYBOARD };
   }
 
   // ── 3b. Bulk delete command ───────────────────────────────────────────────────
@@ -299,7 +313,7 @@ export async function handleCorrectionFlow(
     });
 
     logger.info({ userId, transactionId: last.id, newAmount }, 'Pending amount correction set');
-    return formatCorrectionAmountPrompt(last, newAmount);
+    return { message: formatCorrectionAmountPrompt(last, newAmount), reply_markup: CORR_KEYBOARD };
   }
 
   // ── 5. Category correction command ───────────────────────────────────────────
@@ -331,10 +345,80 @@ export async function handleCorrectionFlow(
     });
 
     logger.info({ userId, transactionId: last.id, newCategoryId: resolved.id }, 'Pending category correction set');
-    return formatCorrectionCategoryPrompt(last, resolved.name);
+    return { message: formatCorrectionCategoryPrompt(last, resolved.name), reply_markup: CORR_KEYBOARD };
   }
 
   return null;
+}
+
+/**
+ * Handles del_yes / del_no inline-button callbacks for single-transaction delete.
+ */
+export async function handleDeleteCallback(
+  action: 'yes' | 'no',
+  userId: string,
+  db: DbPool,
+  logger: FastifyBaseLogger,
+): Promise<string> {
+  if (action === 'no') {
+    await clearPendingDelete(db, userId);
+    logger.info({ userId }, 'Delete cancelled via inline button');
+    return DELETE_CANCELLED;
+  }
+
+  const pending = await getPendingDelete(db, userId);
+  if (!pending) {
+    return '⏱ Время подтверждения истекло. Отправь команду заново.';
+  }
+
+  const deleted = await softDeleteTransaction(db, pending.transactionId, userId);
+  await clearPendingDelete(db, userId);
+
+  if (!deleted) {
+    logger.warn({ userId, transactionId: pending.transactionId }, 'Delete via button: no rows affected');
+    return DELETE_FAILED;
+  }
+
+  logger.info({ userId, transactionId: pending.transactionId }, 'Transaction deleted via inline button');
+  return formatDeleteSuccess(pending);
+}
+
+/**
+ * Handles corr_yes / corr_no inline-button callbacks for amount/category corrections.
+ */
+export async function handleCorrectionCallback(
+  action: 'yes' | 'no',
+  userId: string,
+  db: DbPool,
+  logger: FastifyBaseLogger,
+): Promise<string> {
+  if (action === 'no') {
+    await clearPendingCorrection(db, userId);
+    logger.info({ userId }, 'Correction cancelled via inline button');
+    return CORRECTION_CANCELLED;
+  }
+
+  const pending = await getPendingCorrection(db, userId);
+  if (!pending) {
+    return '⏱ Время подтверждения истекло. Отправь команду заново.';
+  }
+
+  let updated = false;
+  if (pending.field === 'amount' && pending.newAmount !== undefined) {
+    updated = await updateTransactionAmount(db, pending.transactionId, userId, pending.newAmount);
+  } else if (pending.field === 'category' && pending.newCategoryId !== undefined) {
+    updated = await updateTransactionCategory(db, pending.transactionId, userId, pending.newCategoryId);
+  }
+
+  await clearPendingCorrection(db, userId);
+
+  if (!updated) {
+    logger.warn({ userId, transactionId: pending.transactionId }, 'Correction via button: no rows affected');
+    return CORRECTION_FAILED;
+  }
+
+  logger.info({ userId, transactionId: pending.transactionId, field: pending.field }, 'Correction applied via inline button');
+  return formatCorrectionSuccess(pending);
 }
 
 /**

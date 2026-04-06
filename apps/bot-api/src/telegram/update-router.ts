@@ -15,7 +15,7 @@ import { matchExportCommand, parseExportCallback, EXPORT_PERIOD_KEYBOARD } from 
 import { handleExportRequest } from './export/export-handler';
 import { sendDocument } from './telegram-client';
 import { handleGoalCommand } from './goals/goal-handler';
-import { handleCorrectionFlow, handleBulkDeleteCallback } from './transaction-correction/correction-handler';
+import { handleCorrectionFlow, handleBulkDeleteCallback, handleDeleteCallback, handleCorrectionCallback } from './transaction-correction/correction-handler';
 import { handleResetFlow } from './reset/reset-handler';
 import { handleTextMessage, CONFIRMATION_KEYBOARD } from './text-intake/handler';
 import { getVoiceTranscript } from './voice-intake/handler';
@@ -362,6 +362,14 @@ export async function routeTelegramUpdate(
             logger.info({ updateId: update.update_id, userId }, 'Transaction cancelled via inline button');
             await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: '❌ Отменено.' }, logger);
           }
+        } else if (data === 'del_yes' || data === 'del_no') {
+          const action = data === 'del_yes' ? 'yes' : 'no';
+          const delResult = await handleDeleteCallback(action, userId, db, logger);
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: delResult }, logger);
+        } else if (data === 'corr_yes' || data === 'corr_no') {
+          const action = data === 'corr_yes' ? 'yes' : 'no';
+          const corrResult = await handleCorrectionCallback(action, userId, db, logger);
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: corrResult }, logger);
         } else if (data === 'bulk_yes' || data === 'bulk_no') {
           const action = data === 'bulk_yes' ? 'yes' : 'no';
           const bulkResult = await handleBulkDeleteCallback(action, userId, db, logger);
