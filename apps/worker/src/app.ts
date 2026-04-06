@@ -7,6 +7,7 @@ import { runDailyRecommendationScheduler } from './daily-recommendations/schedul
 import { runWeeklyReportScheduler } from './weekly-reports/scheduler';
 import { runRecurringReminderScheduler } from './recurring-reminders/scheduler';
 import { runGraceReminderScheduler } from './billing/grace-scheduler';
+import { runTrialExpiryReminderScheduler } from './billing/trial-expiry-scheduler';
 
 export interface WorkerInstance {
   start(): void;
@@ -42,6 +43,7 @@ export function createWorker(env: AppEnv, db: DbPool): WorkerInstance {
       await runWeeklyReportScheduler(db, logger);
       await runRecurringReminderScheduler(db, logger);
       await runGraceReminderScheduler(db, logger);
+      await runTrialExpiryReminderScheduler(db, logger);
       await processJobs(db, env, logger);
     } catch (err) {
       logger.error({ err }, 'Unhandled error in worker tick');
