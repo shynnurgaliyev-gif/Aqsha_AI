@@ -1,4 +1,4 @@
-import type { PendingTransactionDraft } from './session-draft';
+import type { PendingTransactionDraft, BulkDraftItem } from './session-draft';
 
 /**
  * Result boundary returned by the text intake handler.
@@ -9,7 +9,9 @@ import type { PendingTransactionDraft } from './session-draft';
  */
 export type IntakeResult =
   | { kind: 'confirmation_prompt'; message: string; draft: PendingTransactionDraft }
+  | { kind: 'bulk_confirmation_prompt'; message: string; items: BulkDraftItem[] }
   | { kind: 'transaction_saved'; message: string; savedCategoryId: string; savedKind: 'expense' | 'income' }
+  | { kind: 'bulk_saved'; message: string; items: BulkDraftItem[] }
   | { kind: 'cancelled'; message: string }
   | { kind: 'category_not_found'; message: string; candidate: string }
   | { kind: 'unsupported'; message: string };

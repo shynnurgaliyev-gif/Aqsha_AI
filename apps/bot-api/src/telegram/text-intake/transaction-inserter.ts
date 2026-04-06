@@ -1,5 +1,5 @@
 import type { DbPool } from '@aqsha-ai/database';
-import type { PendingTransactionDraft } from './session-draft';
+import type { PendingTransactionDraft, BulkDraftItem } from './session-draft';
 
 /**
  * Inserts a confirmed transaction into the transactions table.
@@ -34,5 +34,31 @@ export async function insertConfirmedTransaction(
       ${draft.rawText},
       'confirmed'
     )
+  `;
+}
+
+/**
+ * Inserts multiple confirmed transactions in a single query.
+ * Used for bulk transaction intake after user confirmation.
+ */
+export async function insertConfirmedBulkTransactions(
+  db: DbPool,
+  userId: string,
+  items: BulkDraftItem[],
+): Promise<void> {
+  if (items.length === 0) return;
+
+  const values = items.map((item) => ({
+    user_id: userId,
+    category_id: item.categoryId,
+    kind: item.kind,
+    amount: item.amount,
+    source_type: 'text' as const,
+    source_raw_text: item.rawText,
+    parse_status: 'confirmed' as const,
+  }));
+
+  await db`
+    INSERT INTO transactions ${db(values, 'user_id', 'category_id', 'kind', 'amount', 'source_type', 'source_raw_text', 'parse_status')}
   `;
 }

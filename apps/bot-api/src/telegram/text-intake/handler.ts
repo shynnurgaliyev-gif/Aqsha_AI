@@ -4,10 +4,15 @@ import type { DbPool } from '@aqsha-ai/database';
 import type { TelegramMessage } from '../types';
 import { parseIntakeText } from './parser';
 import type { IntakeKind } from './parser';
+import { parseBulkInput } from './bulk-parser';
 import { parseWithAi } from './ai-parser';
 import { resolveCategory } from './category-resolver';
 import type { ResolvedCategory } from './category-resolver';
-import { getPendingDraft, setPendingDraft, clearPendingDraft } from './session-draft';
+import {
+  getPendingDraft, setPendingDraft, clearPendingDraft,
+  getPendingBulkDraft, setPendingBulkDraft, clearPendingBulkDraft,
+} from './session-draft';
+import type { BulkDraftItem } from './session-draft';
 import { insertConfirmedTransaction } from './transaction-inserter';
 import { getCategoryHint, setCategoryHint } from './category-hints';
 import type { IntakeResult } from './response';
@@ -98,6 +103,26 @@ export async function handleTextMessage(
   }
 
   // ── A. Pending draft path ────────────────────────────────────────────────────
+  // Check bulk draft first, then single draft.
+  const pendingBulkDraft = await getPendingBulkDraft(db, userId);
+
+  if (pendingBulkDraft) {
+    if (isConfirmation(text)) {
+      // Bulk confirmation is handled in the callback_query path (inline buttons).
+      // If user typed "да" as text, treat it the same way.
+      await clearPendingBulkDraft(db, userId);
+      logger.info({ userId, count: pendingBulkDraft.items.length }, 'Bulk draft confirmed via text');
+      return { kind: 'bulk_saved', message: '', items: pendingBulkDraft.items };
+    }
+    if (isCancellation(text)) {
+      await clearPendingBulkDraft(db, userId);
+      logger.info({ userId }, 'Bulk draft cancelled');
+      return { kind: 'cancelled', message: '❌ Отменено.' };
+    }
+    // Not a confirmation/cancellation — clear bulk draft and treat as new intake.
+    await clearPendingBulkDraft(db, userId);
+  }
+
   const pendingDraft = await getPendingDraft(db, userId);
 
   if (pendingDraft) {
@@ -125,7 +150,44 @@ export async function handleTextMessage(
     // The old draft will be overwritten if the new intake parses successfully.
   }
 
-  // ── B. New intake path ───────────────────────────────────────────────────────
+  // ── B. Bulk intake path ──────────────────────────────────────────────────────
+  // Try bulk parse before single — if 2+ items are found, handle as bulk.
+  const bulkParsed = parseBulkInput(text);
+  if (bulkParsed) {
+    const resolvedItems: BulkDraftItem[] = [];
+    const failedLines: string[] = [];
+
+    for (const p of bulkParsed) {
+      const cat = await resolveWithCache(db, userId, p.kind, p.categoryCandidate);
+      if (cat) {
+        resolvedItems.push({ kind: p.kind, amount: p.amount, categoryId: cat.id, categoryName: cat.name, rawText: p.rawText });
+      } else {
+        failedLines.push(`«${p.categoryCandidate}»`);
+      }
+    }
+
+    if (resolvedItems.length >= 2) {
+      await setPendingBulkDraft(db, userId, { items: resolvedItems });
+      logger.info({ userId, count: resolvedItems.length, failed: failedLines.length }, 'Bulk draft created');
+
+      const total = resolvedItems.reduce((sum, i) => sum + i.amount, 0);
+      const lines = resolvedItems.map((i) => {
+        const emoji = i.kind === 'expense' ? '📤' : '📥';
+        return `${emoji} ${i.categoryName} — ${fmt(i.amount)} ₸`;
+      });
+      const failNote = failedLines.length > 0
+        ? `\n\n⚠️ Не найдены категории: ${failedLines.join(', ')}`
+        : '';
+
+      return {
+        kind: 'bulk_confirmation_prompt',
+        message: `Подтверждаешь ${resolvedItems.length} записи на ${fmt(total)} ₸?\n\n${lines.join('\n')}${failNote}`,
+        items: resolvedItems,
+      };
+    }
+  }
+
+  // ── C. New intake path ───────────────────────────────────────────────────────
   // Stage 1: cheap deterministic parser.
   // Stage 2: AI fallback for broader natural-language input, or category remapping
   //          when deterministic parse succeeded but the extracted category is unknown.

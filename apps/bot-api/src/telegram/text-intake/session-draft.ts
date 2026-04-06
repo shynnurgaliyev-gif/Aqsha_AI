@@ -68,3 +68,66 @@ export async function clearPendingDraft(db: DbPool, userId: string): Promise<voi
     WHERE user_id = ${userId}
   `;
 }
+
+// ── Bulk draft ────────────────────────────────────────────────────────────────
+
+/**
+ * One item in a pending bulk draft.
+ */
+export interface BulkDraftItem {
+  kind: IntakeKind;
+  amount: number;
+  categoryId: string;
+  categoryName: string;
+  rawText: string;
+}
+
+/**
+ * Pending bulk draft stored inside user_sessions.context_json.
+ * Key: "pendingBulkTransaction"
+ */
+export interface PendingBulkDraft {
+  items: BulkDraftItem[];
+}
+
+export async function getPendingBulkDraft(
+  db: DbPool,
+  userId: string,
+): Promise<PendingBulkDraft | null> {
+  const result = await db<Array<{ context_json: Record<string, unknown> }>>`
+    SELECT context_json FROM user_sessions WHERE user_id = ${userId}
+  `;
+  const row = result[0];
+  if (!row) return null;
+
+  const draft = row.context_json['pendingBulkTransaction'];
+  if (!draft || typeof draft !== 'object' || Array.isArray(draft)) return null;
+
+  return draft as PendingBulkDraft;
+}
+
+export async function setPendingBulkDraft(
+  db: DbPool,
+  userId: string,
+  draft: PendingBulkDraft,
+): Promise<void> {
+  await db`
+    UPDATE user_sessions
+    SET
+      context_json         = (context_json - 'pendingTransaction' - 'pendingDelete' - 'pendingCorrection') || ${db.json({ pendingBulkTransaction: draft } as any)},
+      session_status       = 'awaiting_confirmation',
+      last_user_message_at = now()
+    WHERE user_id = ${userId}
+  `;
+}
+
+export async function clearPendingBulkDraft(db: DbPool, userId: string): Promise<void> {
+  await db`
+    UPDATE user_sessions
+    SET
+      context_json         = context_json - 'pendingBulkTransaction',
+      session_status       = 'idle',
+      last_user_message_at = now()
+    WHERE user_id = ${userId}
+  `;
+}

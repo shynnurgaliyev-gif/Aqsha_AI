@@ -23,8 +23,8 @@ import { handleAnalyticsQuery } from './analytics/handler';
 import { handleChat } from './chat/chat-handler';
 import { getChatHistory, setChatHistory } from './chat/chat-session';
 import { sendMessage, answerCallbackQuery } from './telegram-client';
-import { getPendingDraft, clearPendingDraft } from './text-intake/session-draft';
-import { insertConfirmedTransaction } from './text-intake/transaction-inserter';
+import { getPendingDraft, clearPendingDraft, getPendingBulkDraft, clearPendingBulkDraft } from './text-intake/session-draft';
+import { insertConfirmedTransaction, insertConfirmedBulkTransactions } from './text-intake/transaction-inserter';
 import { getBudgetStatus } from './budgets/budget-repository';
 import { formatBudgetAlert } from './budgets/budget-formatter';
 
@@ -182,6 +182,21 @@ export async function routeTelegramUpdate(
                 const { reply: chatReply, updatedHistory } = await handleChat(msg.text ?? '', history, env.OPENAI_API_KEY, env.OPENAI_MODEL, logger);
                 await setChatHistory(db, userId, updatedHistory);
                 await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: chatReply }, logger);
+              } else if (result.kind === 'bulk_confirmation_prompt') {
+                await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+                  chatId: msg.chat.id,
+                  text: result.message,
+                  reply_markup: CONFIRMATION_KEYBOARD,
+                }, logger);
+              } else if (result.kind === 'bulk_saved') {
+                // Bulk confirmed via text "да" — insert and report
+                await insertConfirmedBulkTransactions(db, userId, result.items);
+                const total = result.items.reduce((sum, i) => sum + i.amount, 0);
+                const totalFmt = total.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0');
+                await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+                  chatId: msg.chat.id,
+                  text: `✅ Записано ${result.items.length} операций на ${totalFmt} ₸`,
+                }, logger);
               } else if (result.kind === 'confirmation_prompt') {
                 await sendMessage(env.TELEGRAM_BOT_TOKEN, {
                   chatId: msg.chat.id,
@@ -268,6 +283,41 @@ export async function routeTelegramUpdate(
         }
 
         if (data === 'confirm' || data === 'cancel') {
+          // ── Bulk draft takes priority over single draft ──────────────────────
+          const bulkDraft = await getPendingBulkDraft(db, userId);
+          if (bulkDraft) {
+            if (data === 'confirm') {
+              await insertConfirmedBulkTransactions(db, userId, bulkDraft.items);
+              await clearPendingBulkDraft(db, userId);
+              logger.info({ updateId: update.update_id, userId, count: bulkDraft.items.length }, 'Bulk transactions confirmed via inline button');
+              const total = bulkDraft.items.reduce((sum, i) => sum + i.amount, 0);
+              const totalFmt = total.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0');
+              await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+                chatId,
+                text: `✅ Записано ${bulkDraft.items.length} операций на ${totalFmt} ₸`,
+              }, logger);
+              // Budget alerts for expense items
+              for (const item of bulkDraft.items) {
+                if (item.kind === 'expense') {
+                  try {
+                    const budgetStatus = await getBudgetStatus(db, userId, item.categoryId);
+                    if (budgetStatus && budgetStatus.remaining < 0) {
+                      await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: formatBudgetAlert(budgetStatus) }, logger);
+                    }
+                  } catch (err) {
+                    logger.warn({ err }, 'Budget alert check failed — skipping');
+                  }
+                }
+              }
+            } else {
+              await clearPendingBulkDraft(db, userId);
+              logger.info({ updateId: update.update_id, userId }, 'Bulk draft cancelled via inline button');
+              await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: '❌ Отменено.' }, logger);
+            }
+            break;
+          }
+
+          // ── Single draft ─────────────────────────────────────────────────────
           const draft = await getPendingDraft(db, userId);
 
           if (!draft) {
