@@ -21,7 +21,7 @@ import { formatRecurringConfirmed } from './recurring/recurring-formatter';
 import { handleCorrectionFlow, handleBulkDeleteCallback } from './transaction-correction/correction-handler';
 import { handleResetFlow } from './reset/reset-handler';
 import { handleTextMessage, CONFIRMATION_KEYBOARD } from './text-intake/handler';
-import { handleVoiceMessage } from './voice-intake/handler';
+import { getVoiceTranscript } from './voice-intake/handler';
 import { handleAnalyticsQuery } from './analytics/handler';
 import { handleChat } from './chat/chat-handler';
 import { getChatHistory, setChatHistory } from './chat/chat-session';
@@ -31,6 +31,167 @@ import { insertConfirmedTransaction, insertConfirmedBulkTransactions } from './t
 import { getBudgetStatus } from './budgets/budget-repository';
 import { formatBudgetAlert } from './budgets/budget-formatter';
 import { matchHelpCommand, ONBOARDING_MESSAGE, HELP_MESSAGE } from './help/help-formatter';
+
+/**
+ * Full routing pipeline for any text (typed or voice-transcribed).
+ * Called after /start, billing command, and access gate checks.
+ */
+async function dispatchText(
+  text: string,
+  msg: import('./types').TelegramMessage,
+  chatId: number,
+  userId: string,
+  db: DbPool,
+  env: AppEnv,
+  logger: FastifyBaseLogger,
+): Promise<void> {
+  // ── Billing phone input interception ────────────────────────────────────────
+  const billingPhoneResponse = await handleBillingPhoneInput(text, userId, db, env, logger);
+  if (billingPhoneResponse !== null) {
+    logger.info({ userId }, 'Billing phone input handled');
+    await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: billingPhoneResponse.text }, logger);
+    return;
+  }
+
+  // ── Export command ───────────────────────────────────────────────────────────
+  if (matchExportCommand(text)) {
+    await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+      chatId,
+      text: '📂 За какой период выгрузить историю?',
+      reply_markup: EXPORT_PERIOD_KEYBOARD,
+    }, logger);
+    return;
+  }
+
+  // ── Help command ─────────────────────────────────────────────────────────────
+  if (matchHelpCommand(text)) {
+    await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: HELP_MESSAGE }, logger);
+    return;
+  }
+
+  // ── Analytics ────────────────────────────────────────────────────────────────
+  const analyticsResponse = await handleAnalyticsQuery(text, userId, db, env, logger);
+  if (analyticsResponse !== null) {
+    logger.info({ userId }, 'Analytics query handled');
+    await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: analyticsResponse }, logger);
+    return;
+  }
+
+  // ── Budget commands ──────────────────────────────────────────────────────────
+  let budgetResponse: string | null = null;
+  try {
+    budgetResponse = await handleBudgetCommand(text, userId, db, logger);
+  } catch (err) {
+    logger.error({ err, userId }, 'Budget command error');
+    await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: 'Не удалось выполнить команду. Попробуйте позже.' }, logger);
+    return;
+  }
+  if (budgetResponse !== null) {
+    logger.info({ userId }, 'Budget command handled');
+    await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: budgetResponse }, logger);
+    return;
+  }
+
+  // ── Goal commands ────────────────────────────────────────────────────────────
+  let goalResponse: string | null = null;
+  try {
+    goalResponse = await handleGoalCommand(text, userId, db, logger);
+  } catch (err) {
+    logger.error({ err, userId }, 'Goal command error');
+    await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: 'Не удалось выполнить команду. Попробуйте позже.' }, logger);
+    return;
+  }
+  if (goalResponse !== null) {
+    logger.info({ userId }, 'Goal command handled');
+    await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: goalResponse }, logger);
+    return;
+  }
+
+  // ── Recurring expense commands ───────────────────────────────────────────────
+  let recurringResponse: string | null = null;
+  try {
+    recurringResponse = await handleRecurringCommand(text, userId, db, env, logger);
+  } catch (err) {
+    logger.error({ err, userId }, 'Recurring command error');
+    await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: 'Не удалось выполнить команду. Попробуйте позже.' }, logger);
+    return;
+  }
+  if (recurringResponse !== null) {
+    logger.info({ userId }, 'Recurring command handled');
+    await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: recurringResponse }, logger);
+    return;
+  }
+
+  // ── Reset flow ───────────────────────────────────────────────────────────────
+  const resetResponse = await handleResetFlow(text, userId, db, logger);
+  if (resetResponse !== null) {
+    logger.info({ userId }, 'Reset flow handled');
+    await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: resetResponse }, logger);
+    return;
+  }
+
+  // ── Correction flow ──────────────────────────────────────────────────────────
+  const correctionResponse = await handleCorrectionFlow(text, userId, db, logger);
+  if (correctionResponse !== null) {
+    logger.info({ userId }, 'Correction flow handled');
+    if (typeof correctionResponse === 'string') {
+      await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: correctionResponse }, logger);
+    } else {
+      await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+        chatId,
+        text: correctionResponse.message,
+        reply_markup: correctionResponse.reply_markup,
+      }, logger);
+    }
+    return;
+  }
+
+  // ── Text / bulk intake ───────────────────────────────────────────────────────
+  const result = await handleTextMessage(msg, userId, db, env, logger);
+  logger.info({ userId, resultKind: result.kind }, 'Text message handled');
+
+  if (result.kind === 'unsupported') {
+    const history = await getChatHistory(db, userId);
+    const { reply: chatReply, updatedHistory } = await handleChat(text, history, env.OPENAI_API_KEY, env.OPENAI_MODEL, logger);
+    await setChatHistory(db, userId, updatedHistory);
+    const replyWithHint = `${chatReply}\n\n💡 Напиши «помощь» — покажу все команды.`;
+    await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: replyWithHint }, logger);
+  } else if (result.kind === 'bulk_confirmation_prompt') {
+    await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+      chatId,
+      text: result.message,
+      reply_markup: CONFIRMATION_KEYBOARD,
+    }, logger);
+  } else if (result.kind === 'bulk_saved') {
+    await insertConfirmedBulkTransactions(db, userId, result.items);
+    const total = result.items.reduce((sum, i) => sum + i.amount, 0);
+    const totalFmt = total.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0');
+    await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+      chatId,
+      text: `✅ Записано ${result.items.length} операций на ${totalFmt} ₸`,
+    }, logger);
+  } else if (result.kind === 'confirmation_prompt') {
+    await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+      chatId,
+      text: result.message,
+      reply_markup: CONFIRMATION_KEYBOARD,
+    }, logger);
+  } else if (result.kind === 'transaction_saved') {
+    await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: result.message }, logger);
+    if (result.savedKind === 'expense') {
+      try {
+        const budgetStatus = await getBudgetStatus(db, userId, result.savedCategoryId);
+        if (budgetStatus && budgetStatus.remaining < 0) {
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: formatBudgetAlert(budgetStatus) }, logger);
+        }
+      } catch (err) {
+        logger.warn({ err }, 'Budget alert check failed — skipping');
+      }
+    }
+  } else {
+    await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: result.message }, logger);
+  }
+}
 
 /**
  * Routes an incoming Telegram update to the appropriate handler stub.
@@ -89,161 +250,7 @@ export async function routeTelegramUpdate(
           break;
         }
 
-        // ── Billing phone input interception ───────────────────────────────────
-        // Must run before analytics/correction so pending phone state is consumed.
-        {
-          const billingPhoneResponse = await handleBillingPhoneInput(msg.text ?? '', userId, db, env, logger);
-          if (billingPhoneResponse !== null) {
-            logger.info({ updateId: update.update_id, userId }, 'Billing phone input handled');
-            await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: billingPhoneResponse.text }, logger);
-            break;
-          }
-        }
-
-        // ── Export command ─────────────────────────────────────────────────────
-        if (matchExportCommand(msg.text ?? '')) {
-          await sendMessage(env.TELEGRAM_BOT_TOKEN, {
-            chatId: msg.chat.id,
-            text: '📂 За какой период выгрузить историю?',
-            reply_markup: EXPORT_PERIOD_KEYBOARD,
-          }, logger);
-          break;
-        }
-
-        // ── Help command ───────────────────────────────────────────────────────
-        if (matchHelpCommand(msg.text ?? '')) {
-          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: HELP_MESSAGE }, logger);
-          break;
-        }
-
-        // Analytics queries take priority over correction and text intake.
-        // handleAnalyticsQuery returns null if the text is not a recognised query.
-        const analyticsResponse = await handleAnalyticsQuery(msg.text ?? '', userId, db, env, logger);
-
-        if (analyticsResponse !== null) {
-          logger.info({ updateId: update.update_id }, 'Analytics query handled');
-          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: analyticsResponse }, logger);
-        } else {
-          // Budget commands: set / show / list monthly category budgets.
-          // Returns null if the text is not a recognised budget command.
-          let budgetResponse: string | null = null;
-          try {
-            budgetResponse = await handleBudgetCommand(msg.text ?? '', userId, db, logger);
-          } catch (err) {
-            logger.error({ err, updateId: update.update_id }, 'Budget command error');
-            await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: 'Не удалось выполнить команду. Попробуйте позже.' }, logger);
-            break;
-          }
-
-          if (budgetResponse !== null) {
-            logger.info({ updateId: update.update_id }, 'Budget command handled');
-            await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: budgetResponse }, logger);
-          } else {
-            // Goal commands: create / add_savings / list / show / delete savings goals.
-            // Returns null if the text is not a recognised goal command.
-            let goalResponse: string | null = null;
-            try {
-              goalResponse = await handleGoalCommand(msg.text ?? '', userId, db, logger);
-            } catch (err) {
-              logger.error({ err, updateId: update.update_id }, 'Goal command error');
-              await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: 'Не удалось выполнить команду. Попробуйте позже.' }, logger);
-              break;
-            }
-
-            if (goalResponse !== null) {
-              logger.info({ updateId: update.update_id }, 'Goal command handled');
-              await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: goalResponse }, logger);
-            } else {
-              // Recurring expense commands: create / list / delete.
-              // Returns null if the text is not a recognised recurring command.
-              let recurringResponse: string | null = null;
-              try {
-                recurringResponse = await handleRecurringCommand(msg.text ?? '', userId, db, env, logger);
-              } catch (err) {
-                logger.error({ err, updateId: update.update_id }, 'Recurring command error');
-                await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: 'Не удалось выполнить команду. Попробуйте позже.' }, logger);
-                break;
-              }
-
-              if (recurringResponse !== null) {
-                logger.info({ updateId: update.update_id }, 'Recurring command handled');
-                await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: recurringResponse }, logger);
-              } else {
-            // Correction flow: handles pending state confirmation and correction commands.
-            // Returns null to fall through to text intake when nothing matches.
-            const resetResponse = await handleResetFlow(msg.text ?? '', userId, db, logger);
-            if (resetResponse !== null) {
-              logger.info({ updateId: update.update_id }, 'Reset flow handled');
-              await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: resetResponse }, logger);
-            } else {
-
-            const correctionResponse = await handleCorrectionFlow(msg.text ?? '', userId, db, logger);
-
-            if (correctionResponse !== null) {
-              logger.info({ updateId: update.update_id }, 'Correction flow handled');
-              if (typeof correctionResponse === 'string') {
-                await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: correctionResponse }, logger);
-              } else {
-                await sendMessage(env.TELEGRAM_BOT_TOKEN, {
-                  chatId: msg.chat.id,
-                  text: correctionResponse.message,
-                  reply_markup: correctionResponse.reply_markup,
-                }, logger);
-              }
-            } else {
-              const result = await handleTextMessage(msg, userId, db, env, logger);
-              logger.info({ updateId: update.update_id, resultKind: result.kind }, 'Text message handled');
-
-              // When no financial intent was detected, use conversational AI instead
-              // of a hardcoded "I don't understand" message.
-              if (result.kind === 'unsupported') {
-                const history = await getChatHistory(db, userId);
-                const { reply: chatReply, updatedHistory } = await handleChat(msg.text ?? '', history, env.OPENAI_API_KEY, env.OPENAI_MODEL, logger);
-                await setChatHistory(db, userId, updatedHistory);
-                const replyWithHint = `${chatReply}\n\n💡 Напиши «помощь» — покажу все команды.`;
-                await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: replyWithHint }, logger);
-              } else if (result.kind === 'bulk_confirmation_prompt') {
-                await sendMessage(env.TELEGRAM_BOT_TOKEN, {
-                  chatId: msg.chat.id,
-                  text: result.message,
-                  reply_markup: CONFIRMATION_KEYBOARD,
-                }, logger);
-              } else if (result.kind === 'bulk_saved') {
-                // Bulk confirmed via text "да" — insert and report
-                await insertConfirmedBulkTransactions(db, userId, result.items);
-                const total = result.items.reduce((sum, i) => sum + i.amount, 0);
-                const totalFmt = total.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0');
-                await sendMessage(env.TELEGRAM_BOT_TOKEN, {
-                  chatId: msg.chat.id,
-                  text: `✅ Записано ${result.items.length} операций на ${totalFmt} ₸`,
-                }, logger);
-              } else if (result.kind === 'confirmation_prompt') {
-                await sendMessage(env.TELEGRAM_BOT_TOKEN, {
-                  chatId: msg.chat.id,
-                  text: result.message,
-                  reply_markup: CONFIRMATION_KEYBOARD,
-                }, logger);
-              } else if (result.kind === 'transaction_saved') {
-                await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: result.message }, logger);
-                if (result.savedKind === 'expense') {
-                  try {
-                    const budgetStatus = await getBudgetStatus(db, userId, result.savedCategoryId);
-                    if (budgetStatus && budgetStatus.remaining < 0) {
-                      await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: formatBudgetAlert(budgetStatus) }, logger);
-                    }
-                  } catch (err) {
-                    logger.warn({ err }, 'Budget alert check failed — skipping');
-                  }
-                }
-              } else {
-                await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: result.message }, logger);
-              }
-            }
-              }
-            }
-          }
-        }
-        } // end reset else
+        await dispatchText(msg.text ?? '', msg, msg.chat.id, userId, db, env, logger);
       }
       break;
     }
@@ -261,17 +268,15 @@ export async function routeTelegramUpdate(
           break;
         }
 
-        const result = await handleVoiceMessage(msg, userId, db, env, logger);
-        logger.info({ updateId: update.update_id, resultKind: result.kind }, 'Voice message handled');
-        if (result.kind === 'confirmation_prompt') {
-          await sendMessage(env.TELEGRAM_BOT_TOKEN, {
-            chatId: msg.chat.id,
-            text: result.message,
-            reply_markup: CONFIRMATION_KEYBOARD,
-          }, logger);
-        } else {
-          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: result.message }, logger);
+        // Transcribe voice → route through the same full pipeline as text
+        const voiceResult = await getVoiceTranscript(msg, userId, env, logger);
+        if (!voiceResult.ok) {
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: voiceResult.errorMessage }, logger);
+          break;
         }
+
+        logger.info({ updateId: update.update_id, userId, transcript: voiceResult.transcript }, 'Voice transcribed — routing through full pipeline');
+        await dispatchText(voiceResult.transcript, voiceResult.syntheticMessage, msg.chat.id, userId, db, env, logger);
       }
       break;
     }
