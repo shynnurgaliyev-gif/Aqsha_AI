@@ -4,7 +4,7 @@ const EXPORT_TOKENS = new Set([
 ]);
 
 export function matchExportCommand(text: string): boolean {
-  return EXPORT_TOKENS.has(text.toLowerCase().trim());
+  return EXPORT_TOKENS.has(text.toLowerCase().trim().replace(/[.!?,;]+$/, ''));
 }
 
 /** Keyboard shown after user types the export command. */

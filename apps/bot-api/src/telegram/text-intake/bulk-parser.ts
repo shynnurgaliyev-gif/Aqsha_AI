@@ -32,10 +32,11 @@ function parseImplicitExpense(line: string): ParsedIntake | null {
  * It works by repeatedly matching the pattern (letters) (digits) from left to right.
  */
 function splitBulkInput(text: string): string[] {
-  // Strategy 1: explicit delimiter
+  // Strategy 1: explicit delimiter (comma, newline, or Whisper sentence-ending period)
+  // Each part is stripped of trailing punctuation Whisper may have added.
   const byDelimiter = text
-    .split(/[,\n]+/)
-    .map((s) => s.trim())
+    .split(/[,\n]|\.(?=\s|$)/)
+    .map((s) => s.trim().replace(/[.!?,;]+$/, ''))
     .filter((s) => s.length > 0);
 
   if (byDelimiter.length >= 2) return byDelimiter;
@@ -70,12 +71,13 @@ export function parseBulkInput(text: string): ParsedIntake[] | null {
   const parsed: ParsedIntake[] = [];
 
   for (const line of lines) {
-    const explicit = parseIntakeText(line);
+    const cleanLine = line.replace(/[.!?,;]+$/, '');
+    const explicit = parseIntakeText(cleanLine);
     if (explicit) {
       parsed.push(explicit);
       continue;
     }
-    const implicit = parseImplicitExpense(line);
+    const implicit = parseImplicitExpense(cleanLine);
     if (implicit) {
       parsed.push(implicit);
     }

@@ -78,7 +78,7 @@ export const HELP_MESSAGE = `📖 *Справка по командам Aqsha*
 
 /** Returns true if the message is a help request. */
 export function matchHelpCommand(text: string): boolean {
-  const t = text.trim().toLowerCase();
+  const t = text.trim().toLowerCase().replace(/[.!?,;]+$/, '');
   return (
     t === 'помощь' ||
     t === 'помоги' ||

@@ -38,7 +38,7 @@ const DELETE_LAST_TOKENS = new Set([
  * Exact-match only — no fuzzy matching.
  */
 export function matchCorrectionCommand(text: string): CorrectionCommandType | null {
-  const t = text.toLowerCase().trim();
+  const t = text.toLowerCase().trim().replace(/[.!?,;]+$/, '');
   if (SHOW_RECENT_TOKENS.has(t)) return 'show_recent';
   if (DELETE_LAST_TOKENS.has(t)) return 'delete_last';
   return null;
