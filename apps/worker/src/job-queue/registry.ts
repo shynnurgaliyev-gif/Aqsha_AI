@@ -8,6 +8,7 @@ import { weeklyReportDeliverHandler } from '../weekly-reports/handlers/deliver';
 import { recurringReminderSendHandler } from '../recurring-reminders/handler';
 import { graceReminderSendHandler } from '../billing/grace-reminder-handler';
 import { trialExpiryReminderHandler } from '../billing/trial-expiry-handler';
+import { graceFinalReminderHandler } from '../billing/grace-final-handler';
 
 /**
  * Registry of known job type handlers.
@@ -24,6 +25,7 @@ const handlers = new Map<string, JobHandler>([
   ['recurring_reminder_send', recurringReminderSendHandler],
   ['grace_reminder_send', graceReminderSendHandler],
   ['trial_expiry_reminder', trialExpiryReminderHandler],
+  ['grace_final_reminder', graceFinalReminderHandler],
 ]);
 
 /**
