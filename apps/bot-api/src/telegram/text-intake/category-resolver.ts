@@ -172,6 +172,7 @@ export function normalizeCategoryCandidate(raw: string): string {
  *   1. User's own category — exact normalized_name match
  *   2. System category    — exact normalized_name match
  *   3. Alias lookup       — category_aliases.normalized_alias match
+ *   4. Repeat 1–3 with declension-normalized form (e.g. "еду" → "еда")
  *
  * Kind must match — never returns a category of the wrong kind.
  * Returns null if no matching active category is found.
@@ -183,7 +184,24 @@ export async function resolveCategory(
   candidate: string,
 ): Promise<ResolvedCategory | null> {
   const normalized = normalizeCandidate(candidate);
+  const result = await resolveCategoryByNormalized(db, userId, kind, normalized);
+  if (result) return result;
 
+  // Fallback: try with declension-normalized form (еду → еда, аренду → аренда, etc.)
+  const normalizedForms = normalizeCandidate(normalizeCategoryCandidate(candidate));
+  if (normalizedForms !== normalized) {
+    return resolveCategoryByNormalized(db, userId, kind, normalizedForms);
+  }
+
+  return null;
+}
+
+async function resolveCategoryByNormalized(
+  db: DbPool,
+  userId: string,
+  kind: IntakeKind,
+  normalized: string,
+): Promise<ResolvedCategory | null> {
   // 1. User's own category
   const userResult = await db<ResolvedCategory[]>`
     SELECT id, name, kind
