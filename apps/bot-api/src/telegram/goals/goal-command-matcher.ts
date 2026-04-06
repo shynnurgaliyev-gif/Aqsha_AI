@@ -20,6 +20,8 @@ const LIST_TOKENS = new Set([
 // "коплю на iPhone 500000" | "цель iPhone 500000" | "создай цель iPhone 500000"
 const CREATE_PATTERNS: RegExp[] = [
   /^коплю\s+на\s+(.+)\s+(\d+)$/,
+  /^накопить\s+на\s+(.+)\s+(\d+)$/,
+  /^хочу\s+накопить\s+на\s+(.+)\s+(\d+)$/,
   /^создай\s+(?:цель|копилку)\s+(.+)\s+(\d+)$/,
   /^создать\s+(?:цель|копилку)\s+(.+)\s+(\d+)$/,
   /^новая\s+(?:цель|копилка)\s+(.+)\s+(\d+)$/,
@@ -29,8 +31,12 @@ const CREATE_PATTERNS: RegExp[] = [
 // "отложил на iPhone 50000" | "пополнил iPhone 50000" | "добавить в цель iPhone 50000"
 const ADD_PATTERNS: RegExp[] = [
   /^отложил\s+(?:на\s+)?(.+)\s+(\d+)$/,
+  /^отложить\s+(?:на\s+)?(.+)\s+(\d+)$/,
   /^откладываю\s+(?:на\s+)?(.+)\s+(\d+)$/,
-  /^пополнил\s+(?:копилку\s+)?(.+)\s+(\d+)$/,
+  /^пополнил\s+(?:цель\s+|копилку\s+)?(.+)\s+(\d+)$/,
+  /^пополнить\s+(?:цель\s+|копилку\s+)?(.+)\s+(\d+)$/,
+  /^закинуть\s+(?:в\s+)?(?:цель\s+|копилку\s+)?(.+)\s+(\d+)$/,
+  /^закинул\s+(?:в\s+)?(?:цель\s+|копилку\s+)?(.+)\s+(\d+)$/,
   /^добавил\s+(?:к\s+|в\s+)?(?:цели?\s+|копилку\s+)?(.+)\s+(\d+)$/,
   /^добавить\s+(?:к\s+|в\s+)?(?:цели?\s+|копилку\s+)?(.+)\s+(\d+)$/,
   /^добавь\s+(?:к\s+|в\s+)?(?:цели?\s+|копилку\s+)?(.+)\s+(\d+)$/,
@@ -49,7 +55,7 @@ const SHOW_PATTERNS: RegExp[] = [
 ];
 
 export function matchGoalCommand(text: string): GoalCommand | null {
-  const t = text.toLowerCase().trim();
+  const t = text.toLowerCase().trim().replace(/[.!?,;]+$/, '');
 
   if (LIST_TOKENS.has(t)) return { type: 'list' };
 
@@ -78,6 +84,8 @@ export function matchGoalCommand(text: string): GoalCommand | null {
   const CREATE_NO_AMOUNT_PATTERNS: RegExp[] = [
     /^(?:создать|создай|новая)\s+(?:цель|копилку)\s+(.+)$/,
     /^коплю\s+на\s+(.+)$/,
+    /^накопить\s+на\s+(.+)$/,
+    /^хочу\s+накопить\s+(?:на\s+)?(.+)$/,
   ];
   for (const p of CREATE_NO_AMOUNT_PATTERNS) {
     const m = t.match(p);

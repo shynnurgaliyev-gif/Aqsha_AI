@@ -37,7 +37,11 @@ export type BudgetCommand = SetBudgetCommand | ShowBudgetCommand | ListBudgetsCo
  */
 const LIST_TOKENS = new Set([
   'мои лимиты',
+  'лимиты',
   'бюджеты',
+  'мои бюджеты',
+  'показать бюджеты',
+  'покажи бюджеты',
   'my budgets',
   'budgets',
 ]);
@@ -53,9 +57,16 @@ const LIST_TOKENS = new Set([
  *   "set budget food 50000"
  */
 const SET_PATTERNS: RegExp[] = [
+  /^лимит\s+на\s+(.+)\s+(\d+)$/,
   /^лимит\s+(.+)\s+(\d+)$/,
+  /^бюджет\s+на\s+(.+)\s+(\d+)$/,
   /^бюджет\s+(.+)\s+(\d+)$/,
-  /^установи\s+(?:бюджет|лимит)\s+(.+)\s+(\d+)$/,
+  /^установи\s+(?:бюджет|лимит)\s+(?:на\s+)?(.+)\s+(\d+)$/,
+  /^установить\s+(?:бюджет|лимит)\s+(?:на\s+)?(.+)\s+(\d+)$/,
+  /^поставить\s+(?:бюджет|лимит)\s+(?:на\s+)?(.+)\s+(\d+)$/,
+  /^поставь\s+(?:бюджет|лимит)\s+(?:на\s+)?(.+)\s+(\d+)$/,
+  /^добавить\s+бюджет\s+(?:на\s+)?(.+)\s+(\d+)$/,
+  /^добавь\s+бюджет\s+(?:на\s+)?(.+)\s+(\d+)$/,
   /^set\s+budget\s+(.+)\s+(\d+)$/,
 ];
 
@@ -81,8 +92,8 @@ const DELETE_PATTERNS: RegExp[] = [
  *   "budget food"
  */
 const SHOW_PATTERNS: RegExp[] = [
-  /^лимит\s+(.+)$/,
-  /^бюджет\s+(.+)$/,
+  /^лимит\s+(?:на\s+)?(.+)$/,
+  /^бюджет\s+(?:на\s+)?(.+)$/,
   /^budget\s+(.+)$/,
 ];
 
@@ -95,7 +106,7 @@ const SHOW_PATTERNS: RegExp[] = [
  *   3. SHOW_PATTERNS (regex, no trailing number)
  */
 export function matchBudgetCommand(text: string): BudgetCommand | null {
-  const t = text.toLowerCase().trim();
+  const t = text.toLowerCase().trim().replace(/[.!?,;]+$/, '');
 
   if (LIST_TOKENS.has(t)) {
     return { type: 'list_budgets' };
