@@ -15,7 +15,10 @@ interface DueRecurring {
  * Conditions (all must hold):
  *   - recurring expense is active
  *   - user is active with a non-empty timezone
- *   - today's day-of-month in user's timezone matches day_of_month
+ *   - today's day-of-month in user's timezone matches the effective reminder day,
+ *     which is LEAST(day_of_month, last_day_of_current_month).
+ *     This means day=29 fires on Feb 28 in non-leap years, day=31 fires on
+ *     Apr 30 in April, etc.
  *   - current hour in user's timezone >= reminder_hour (fires even if worker was briefly down)
  *   - last_reminded_month is not the current month in user's timezone
  *   - no recurring_reminder_send job for this recurring_id already created today (UTC)
@@ -33,7 +36,15 @@ async function findDueRecurringExpenses(db: DbPool): Promise<DueRecurring[]> {
     WHERE re.is_active = true
       AND u.is_active = true
       AND u.timezone <> ''
-      AND EXTRACT(DAY  FROM (now() AT TIME ZONE u.timezone)) = re.day_of_month
+      AND EXTRACT(DAY FROM (now() AT TIME ZONE u.timezone)) =
+            LEAST(
+              re.day_of_month,
+              EXTRACT(DAY FROM (
+                date_trunc('month', (now() AT TIME ZONE u.timezone))
+                + interval '1 month'
+                - interval '1 day'
+              ))::int
+            )
       AND EXTRACT(HOUR FROM (now() AT TIME ZONE u.timezone)) >= re.reminder_hour
       AND (
         re.last_reminded_month IS NULL

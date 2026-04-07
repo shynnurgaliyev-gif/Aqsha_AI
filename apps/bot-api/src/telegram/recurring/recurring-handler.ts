@@ -50,16 +50,10 @@ export async function handleRecurringCommand(
   const draft = matchRecurringCreateCommand(text.toLowerCase().trim());
 
   if (!draft) {
-    // If the text clearly looks like a recurring command but parsing failed,
-    // check if the day is out of the 1–28 range and give a targeted error.
+    // Intercept unrecognised "каждый месяц / ежемесячно" text so it doesn't
+    // fall through to the analytics handler and produce a confusing response.
     if (looksLikeRecurringCommand(text)) {
-      const dayMatch = /\b(\d{1,2})\b/.exec(text.replace(/\d{4,}/g, ''));
-      if (dayMatch && dayMatch[1]) {
-        const day = parseInt(dayMatch[1], 10);
-        if (day > 28) {
-          return `День ${day} недоступен — февраль самый короткий месяц. Укажи день от 1 до 28, например 28.`;
-        }
-      }
+      return 'Не смог разобрать команду. Формат: «Аренда 50000 каждый месяц 5»';
     }
     return null;
   }

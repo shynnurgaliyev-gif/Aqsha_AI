@@ -28,8 +28,10 @@ export function looksLikeRecurringCommand(text: string): boolean {
  *   "ежемесячно 5 аренда 120000"
  *   "аренда 120000 каждого числа 5"
  *
- * Day must be 1–28 (works even in February).
- * Returns null if the text does not match or day is out of range.
+ * Day must be 1–31. Days beyond the last day of a given month (e.g. 29 in
+ * February) are clamped to the last valid day of that month by the scheduler
+ * using LEAST(day_of_month, last_day_of_month).
+ * Returns null if the text does not match any pattern.
  */
 export function matchRecurringCreateCommand(text: string): RecurringDraft | null {
   const t = text.trim();
@@ -48,7 +50,7 @@ export function matchRecurringCreateCommand(text: string): RecurringDraft | null
       const desc = rawDesc.trim();
       const amount = parseInt(rawAmt, 10);
       const day = parseInt(rawDay, 10);
-      if (desc && amount > 0 && day >= 1 && day <= 28) {
+      if (desc && amount > 0 && day >= 1 && day <= 31) {
         return { description: desc, amount, dayOfMonth: day };
       }
     }
@@ -62,7 +64,7 @@ export function matchRecurringCreateCommand(text: string): RecurringDraft | null
       const desc = rawDesc.trim();
       const day = parseInt(rawDay, 10);
       const amount = parseInt(rawAmt, 10);
-      if (desc && day >= 1 && day <= 28 && amount > 0) {
+      if (desc && day >= 1 && day <= 31 && amount > 0) {
         return { description: desc, amount, dayOfMonth: day };
       }
     }
@@ -76,7 +78,7 @@ export function matchRecurringCreateCommand(text: string): RecurringDraft | null
       const day = parseInt(rawDay, 10);
       const desc = rawDesc.trim();
       const amount = parseInt(rawAmt, 10);
-      if (day >= 1 && day <= 28 && desc && amount > 0) {
+      if (day >= 1 && day <= 31 && desc && amount > 0) {
         return { description: desc, amount, dayOfMonth: day };
       }
     }
