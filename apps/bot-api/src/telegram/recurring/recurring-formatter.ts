@@ -56,3 +56,29 @@ export function formatRecurringList(rows: RecurringDisplayRow[]): string {
   );
   return `📋 Регулярные расходы:\n\n${lines.join('\n\n')}`;
 }
+
+export interface RecurringListWithKeyboard {
+  message: string;
+  reply_markup: InlineKeyboardMarkup;
+}
+
+/**
+ * Returns the recurring list message with one [🗑 description] delete button per row.
+ */
+export function formatRecurringListWithKeyboard(rows: RecurringDisplayRow[]): RecurringListWithKeyboard | string {
+  if (rows.length === 0) {
+    return 'У вас нет регулярных расходов.';
+  }
+  const lines = rows.map(
+    (r, i) =>
+      `${i + 1}. 💸 ${r.description} — ${formatAmount(r.amount)}\n` +
+      `   📅 ${dayLabel(r.dayOfMonth)}, ⏰ ${r.reminderHour}:00`,
+  );
+  const message = `📋 Регулярные расходы:\n\n${lines.join('\n\n')}`;
+  const reply_markup: InlineKeyboardMarkup = {
+    inline_keyboard: rows.map((r) => [
+      { text: `🗑 ${r.description}`, callback_data: `rec_del:${r.id}` },
+    ]),
+  };
+  return { message, reply_markup };
+}

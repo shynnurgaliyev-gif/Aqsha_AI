@@ -65,6 +65,22 @@ export async function listRecurringExpenses(
   `;
 }
 
+export async function softDeleteRecurringExpense(
+  db: DbPool,
+  id: string,
+  userId: string,
+): Promise<boolean> {
+  const rows = await db<{ id: string }[]>`
+    UPDATE public.recurring_expenses
+    SET is_active = false
+    WHERE id = ${id}::uuid
+      AND user_id = ${userId}::uuid
+      AND is_active = true
+    RETURNING id::text
+  `;
+  return rows.length > 0;
+}
+
 export async function findRecurringExpenseById(
   db: DbPool,
   id: string,

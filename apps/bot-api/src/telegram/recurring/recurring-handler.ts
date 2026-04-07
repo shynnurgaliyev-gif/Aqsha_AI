@@ -1,7 +1,7 @@
 import type { FastifyBaseLogger } from 'fastify';
 import type { DbPool } from '@aqsha-ai/database';
 import type { InlineKeyboardMarkup } from '../telegram-client';
-import { matchRecurringCreateCommand, matchRecurringListCommand } from './recurring-command-matcher';
+import { matchRecurringCreateCommand, matchRecurringListCommand, looksLikeRecurringCommand } from './recurring-command-matcher';
 import {
   getPendingRecurringDraft,
   setPendingRecurringDraft,
@@ -11,12 +11,13 @@ import {
   insertRecurringExpense,
   listRecurringExpenses,
   findRecurringExpenseById,
+  softDeleteRecurringExpense,
 } from './recurring-repository';
 import {
   TIME_KEYBOARD,
   formatTimePrompt,
   formatRecurringCreated,
-  formatRecurringList,
+  formatRecurringListWithKeyboard,
 } from './recurring-formatter';
 import { resolveCategory } from '../text-intake/category-resolver';
 
@@ -42,12 +43,26 @@ export async function handleRecurringCommand(
   if (matchRecurringListCommand(text)) {
     const rows = await listRecurringExpenses(db, userId);
     logger.info({ userId, count: rows.length }, 'Recurring expenses listed');
-    return formatRecurringList(rows);
+    return formatRecurringListWithKeyboard(rows);
   }
 
   // Create command
   const draft = matchRecurringCreateCommand(text.toLowerCase().trim());
-  if (!draft) return null;
+
+  if (!draft) {
+    // If the text clearly looks like a recurring command but parsing failed,
+    // check if the day is out of the 1–28 range and give a targeted error.
+    if (looksLikeRecurringCommand(text)) {
+      const dayMatch = /\b(\d{1,2})\b/.exec(text.replace(/\d{4,}/g, ''));
+      if (dayMatch && dayMatch[1]) {
+        const day = parseInt(dayMatch[1], 10);
+        if (day > 28) {
+          return `День ${day} недоступен — февраль самый короткий месяц. Укажи день от 1 до 28, например 28.`;
+        }
+      }
+    }
+    return null;
+  }
 
   await setPendingRecurringDraft(db, userId, draft);
   logger.info({ userId, description: draft.description, amount: draft.amount, day: draft.dayOfMonth }, 'Pending recurring draft set — awaiting time selection');
@@ -134,4 +149,23 @@ export async function handleRecurringRecordCallback(
   const amountFmt = rec.amount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0');
   logger.info({ userId, recurringId, amount: rec.amount }, 'Recurring expense recorded as transaction');
   return `✅ Расход записан!\n💵 ${amountFmt} ₸ — ${rec.description}`;
+}
+
+/**
+ * Called when the user taps 🗑 rec_del:UUID from the recurring list.
+ * Soft-deletes the recurring expense.
+ */
+export async function handleRecurringDeleteCallback(
+  recurringId: string,
+  userId: string,
+  db: DbPool,
+  logger: FastifyBaseLogger,
+): Promise<string> {
+  const deleted = await softDeleteRecurringExpense(db, recurringId, userId);
+  if (!deleted) {
+    logger.warn({ userId, recurringId }, 'Recurring expense not found or already deleted');
+    return 'Регулярный расход не найден или уже удалён.';
+  }
+  logger.info({ userId, recurringId }, 'Recurring expense deleted');
+  return '✅ Регулярный расход удалён.';
 }

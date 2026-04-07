@@ -16,7 +16,7 @@ import { handleExportRequest } from './export/export-handler';
 import { sendDocument } from './telegram-client';
 import { handleGoalCommand } from './goals/goal-handler';
 import { handleCorrectionFlow, handleBulkDeleteCallback, handleDeleteCallback, handleCorrectionCallback } from './transaction-correction/correction-handler';
-import { handleRecurringCommand, handleRecurringTimeCallback, handleRecurringRecordCallback } from './recurring/recurring-handler';
+import { handleRecurringCommand, handleRecurringTimeCallback, handleRecurringRecordCallback, handleRecurringDeleteCallback } from './recurring/recurring-handler';
 import { handleResetFlow } from './reset/reset-handler';
 import { handleTextMessage, CONFIRMATION_KEYBOARD } from './text-intake/handler';
 import { getVoiceTranscript } from './voice-intake/handler';
@@ -408,6 +408,10 @@ export async function routeTelegramUpdate(
           await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: recRecordResult }, logger);
         } else if (data && data.startsWith('rec_skip:')) {
           await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: '✓ Пропущено.' }, logger);
+        } else if (data && data.startsWith('rec_del:')) {
+          const recurringId = data.slice('rec_del:'.length);
+          const recDelResult = await handleRecurringDeleteCallback(recurringId, userId, db, logger);
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: recDelResult }, logger);
         } else if (data && parseExportCallback(data) !== null) {
           const period = parseExportCallback(data)!;
           const exportResult = await handleExportRequest(userId, period, db, logger);
