@@ -1,0 +1,23 @@
+{
+  "name": "@aqsha-ai/bot-api",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/main.ts",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo bot-api lint is not configured yet",
+    "test": "echo bot-api test is not configured yet"
+  },
+  "dependencies": {
+    "@aqsha-ai/config": "workspace:*",
+    "@aqsha-ai/database": "workspace:*",
+    "fastify": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.4.5"
+  }
+}

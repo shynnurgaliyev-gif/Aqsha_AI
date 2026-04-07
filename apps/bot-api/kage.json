@@ -1,0 +1,12 @@
+{
+  "name": "@aqsha-ai/bot-api",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "echo bot-api dev is not configured yet",
+    "build": "echo bot-api build is not configured yet",
+    "lint": "echo bot-api lint is not configured yet",
+    "typecheck": "echo bot-api typecheck is not configured yet",
+    "test": "echo bot-api test is not configured yet"
+  }
+}

@@ -1,0 +1,40 @@
+# Node
+node_modules/
+.pnpm-store/
+
+# Build output — rebuilt inside Docker; must not leak into build context
+dist/
+build/
+*.tsbuildinfo
+
+# Environment secrets — never in image
+.env
+.env.*
+!.env.example
+
+# Git / CI
+.git/
+.github/
+
+# Editor
+.vscode/
+*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Test / coverage artifacts
+coverage/
+.tmp/
+.temp/
+
+# Supabase local dev
+.supabase/
+
+# Docker override (local only)
+docker-compose.override.yml

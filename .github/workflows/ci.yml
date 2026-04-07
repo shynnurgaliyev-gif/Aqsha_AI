@@ -1,0 +1,107 @@
+name: CI
+
+# Runs on every push and on PRs targeting main or dev.
+# Validates the full monorepo: typecheck, build, and Docker image construction.
+# No automatic deploy is performed here.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  # ── Job 1: Typecheck + Build ──────────────────────────────────────────────
+  build:
+    name: Typecheck & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # corepack reads the packageManager field from package.json and activates
+      # the declared pnpm version (pnpm@10.x).
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Prepare pnpm (from packageManager field)
+        run: corepack install
+
+      # Cache the pnpm content-addressable store keyed on the lockfile.
+      # Restoring the store avoids re-downloading packages on lockfile hits.
+      - name: Get pnpm store path
+        id: pnpm-store
+        run: echo "path=$(pnpm store path)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ── Shared packages — build in dependency order ──────────────────────
+      - name: Build @aqsha-ai/shared
+        run: pnpm --filter @aqsha-ai/shared build
+
+      - name: Build @aqsha-ai/config
+        run: pnpm --filter @aqsha-ai/config build
+
+      - name: Build @aqsha-ai/database
+        run: pnpm --filter @aqsha-ai/database build
+
+      # ── Apps — typecheck then build ──────────────────────────────────────
+      - name: Typecheck @aqsha-ai/bot-api
+        run: pnpm --filter @aqsha-ai/bot-api typecheck
+
+      - name: Build @aqsha-ai/bot-api
+        run: pnpm --filter @aqsha-ai/bot-api build
+
+      - name: Typecheck @aqsha-ai/worker
+        run: pnpm --filter @aqsha-ai/worker typecheck
+
+      - name: Build @aqsha-ai/worker
+        run: pnpm --filter @aqsha-ai/worker build
+
+      - name: Typecheck @aqsha-ai/admin-web
+        run: pnpm --filter @aqsha-ai/admin-web typecheck
+
+      - name: Build @aqsha-ai/admin-web
+        run: pnpm --filter @aqsha-ai/admin-web build
+
+  # ── Job 2: Docker Build Validation ───────────────────────────────────────
+  # Builds both Docker images to validate the Dockerfiles are correct.
+  # Images are not tagged for a registry or pushed anywhere.
+  docker:
+    name: Docker Build Validation
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build bot-api Docker image
+        run: |
+          docker build \
+            --progress=plain \
+            -f apps/bot-api/Dockerfile \
+            -t aqsha-ai/bot-api:ci \
+            .
+
+      - name: Build worker Docker image
+        run: |
+          docker build \
+            --progress=plain \
+            -f apps/worker/Dockerfile \
+            -t aqsha-ai/worker:ci \
+            .

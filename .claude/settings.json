@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo [dev-agent] File changed. Spawn qa-agent when implementation is complete."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo [QA Gate] Has qa-agent returned PASS for this task? If not, spawn it before closing."
+          }
+        ]
+      }
+    ]
+  }
+}

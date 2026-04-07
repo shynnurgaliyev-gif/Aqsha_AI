@@ -1,0 +1,49 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# env
+.env
+.env.*
+!.env.example
+
+# logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# build
+dist/
+build/
+.next/
+out/
+coverage/
+.tmp/
+.temp/
+
+# turbo
+.turbo/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# local runtime files
+*.pid
+*.seed
+*.pid.lock
+
+# docker
+docker-compose.override.yml
+
+# supabase local
+.supabase/
+
+# misc
+*.local
