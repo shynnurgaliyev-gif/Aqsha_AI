@@ -16,6 +16,7 @@ import { handleExportRequest } from './export/export-handler';
 import { sendDocument } from './telegram-client';
 import { handleGoalCommand } from './goals/goal-handler';
 import { handleCorrectionFlow, handleBulkDeleteCallback, handleDeleteCallback, handleCorrectionCallback } from './transaction-correction/correction-handler';
+import { handleRecurringCommand, handleRecurringTimeCallback, handleRecurringRecordCallback } from './recurring/recurring-handler';
 import { handleResetFlow } from './reset/reset-handler';
 import { handleTextMessage, CONFIRMATION_KEYBOARD } from './text-intake/handler';
 import { getVoiceTranscript } from './voice-intake/handler';
@@ -93,6 +94,29 @@ async function dispatchText(
   if (goalResponse !== null) {
     logger.info({ userId }, 'Goal command handled');
     await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: goalResponse }, logger);
+    return;
+  }
+
+  // ── Recurring expenses ───────────────────────────────────────────────────────
+  let recurringResponse: Awaited<ReturnType<typeof handleRecurringCommand>>;
+  try {
+    recurringResponse = await handleRecurringCommand(text, userId, db, logger);
+  } catch (err) {
+    logger.error({ err, userId }, 'Recurring command error');
+    await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: 'Не удалось выполнить команду. Попробуйте позже.' }, logger);
+    return;
+  }
+  if (recurringResponse !== null) {
+    logger.info({ userId }, 'Recurring command handled');
+    if (typeof recurringResponse === 'string') {
+      await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: recurringResponse }, logger);
+    } else {
+      await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+        chatId,
+        text: recurringResponse.message,
+        reply_markup: recurringResponse.reply_markup,
+      }, logger);
+    }
     return;
   }
 
@@ -374,6 +398,16 @@ export async function routeTelegramUpdate(
           const action = data === 'bulk_yes' ? 'yes' : 'no';
           const bulkResult = await handleBulkDeleteCallback(action, userId, db, logger);
           await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: bulkResult }, logger);
+        } else if (data && data.startsWith('rec_time:')) {
+          const hour = parseInt(data.slice('rec_time:'.length), 10);
+          const recTimeResult = await handleRecurringTimeCallback(hour, userId, db, logger);
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: recTimeResult }, logger);
+        } else if (data && data.startsWith('rec_record:')) {
+          const recurringId = data.slice('rec_record:'.length);
+          const recRecordResult = await handleRecurringRecordCallback(recurringId, userId, db, logger);
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: recRecordResult }, logger);
+        } else if (data && data.startsWith('rec_skip:')) {
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: '✓ Пропущено.' }, logger);
         } else if (data && parseExportCallback(data) !== null) {
           const period = parseExportCallback(data)!;
           const exportResult = await handleExportRequest(userId, period, db, logger);
