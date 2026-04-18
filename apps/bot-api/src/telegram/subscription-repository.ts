@@ -32,4 +32,13 @@ export async function ensureTrialSubscription(
     )
     ON CONFLICT DO NOTHING
   `;
+
+  // Keep users.current_period_end in sync with the trial end date.
+  // The DB trigger syncs current_plan_status but not current_period_end.
+  await db`
+    UPDATE public.users
+       SET current_period_end = now() + make_interval(days => ${trialDays})
+     WHERE id = ${userId}::uuid
+       AND current_period_end IS NULL
+  `;
 }

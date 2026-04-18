@@ -17,15 +17,22 @@ import type { Logger } from 'pino';
 export async function runSubscriptionLifecycleCheck(db: DbPool, logger: Logger): Promise<void> {
   try {
     // ── Trial → expired ───────────────────────────────────────────────────────
+    // Fallback: if current_period_end is NULL (legacy users), read trial_end_at
+    // from the subscriptions table directly.
     const trialExpired = await db<{ id: string }[]>`
-      UPDATE public.users
+      UPDATE public.users u
          SET current_plan_status = 'expired',
-             updated_at = now()
-       WHERE current_plan_status = 'trial'
-         AND current_period_end IS NOT NULL
-         AND current_period_end < now()
-         AND is_active = true
-      RETURNING id
+             updated_at          = now()
+        FROM public.subscriptions s
+       WHERE s.user_id    = u.id
+         AND s.is_current = true
+         AND u.current_plan_status = 'trial'
+         AND u.is_active = true
+         AND (
+               (u.current_period_end IS NOT NULL AND u.current_period_end < now())
+            OR (u.current_period_end IS NULL AND s.trial_end_at IS NOT NULL AND s.trial_end_at < now())
+             )
+      RETURNING u.id
     `;
 
     if (trialExpired.length > 0) {
