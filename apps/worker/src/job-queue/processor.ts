@@ -3,6 +3,7 @@ import type { AppEnv } from '@aqsha-ai/config';
 import type { DbPool } from '@aqsha-ai/database';
 import { claimNextJob, markJobDone, markJobFailed } from './repository';
 import { getHandler } from './registry';
+import { TelegramBotBlockedError } from '../telegram/sender';
 
 /**
  * Claims and processes up to JOB_BATCH_SIZE jobs in a single worker tick.
@@ -49,6 +50,31 @@ export async function processJobs(
       logger.info({ jobId: job.id, jobType: job.job_type, attempts: job.attempts }, 'Job done');
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
+
+      if (err instanceof TelegramBotBlockedError && job.user_id) {
+        logger.info({ jobId: job.id, userId: job.user_id }, 'Bot blocked by user — deactivating');
+        try {
+          await db`
+            UPDATE public.users
+               SET is_active  = false,
+                   updated_at = now()
+             WHERE id = ${job.user_id}::uuid
+          `;
+          await db`
+            UPDATE public.job_queue
+               SET status     = 'canceled',
+                   last_error = ${error},
+                   updated_at = now()
+             WHERE user_id = ${job.user_id}::uuid
+               AND status  = 'pending'
+          `;
+        } catch (deactivateErr) {
+          logger.error({ deactivateErr, userId: job.user_id }, 'Failed to deactivate blocked user');
+        }
+        await markJobFailed(db, job.id, error);
+        continue;
+      }
+
       logger.error({ err, jobId: job.id, jobType: job.job_type, attempts: job.attempts }, 'Job failed');
       await markJobFailed(db, job.id, error);
     }

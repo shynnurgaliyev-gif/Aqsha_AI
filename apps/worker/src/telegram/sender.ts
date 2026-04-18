@@ -10,6 +10,19 @@ interface InlineKeyboard {
 }
 
 /**
+ * Thrown when Telegram returns HTTP 403 — the user has blocked the bot.
+ * Caught by the job processor to deactivate the user without retrying.
+ */
+export class TelegramBotBlockedError extends Error {
+  public readonly chatId: number;
+  constructor(chatId: number) {
+    super(`Telegram HTTP 403: bot blocked by user (chatId=${chatId})`);
+    this.name = 'TelegramBotBlockedError';
+    this.chatId = chatId;
+  }
+}
+
+/**
  * Sends a plain-text message to a Telegram chat via the Bot API.
  *
  * Unlike the bot-api outbound sender, this function THROWS on all failure modes:
@@ -47,6 +60,7 @@ export async function sendTelegramMessage(
   }
 
   if (!response.ok) {
+    if (response.status === 403) throw new TelegramBotBlockedError(chatId);
     logger.error({ chatId, status: response.status }, 'Telegram sendMessage HTTP error');
     throw new Error(`Telegram HTTP ${response.status}`);
   }
@@ -60,6 +74,7 @@ export async function sendTelegramMessage(
   }
 
   if (!body.ok) {
+    if (body.error_code === 403) throw new TelegramBotBlockedError(chatId);
     logger.error(
       { chatId, errorCode: body.error_code, description: body.description },
       'Telegram sendMessage API error',
@@ -97,6 +112,7 @@ export async function sendTelegramMessageWithKeyboard(
   }
 
   if (!response.ok) {
+    if (response.status === 403) throw new TelegramBotBlockedError(chatId);
     logger.error({ chatId, status: response.status }, 'Telegram sendMessage (keyboard) HTTP error');
     throw new Error(`Telegram HTTP ${response.status}`);
   }
@@ -110,6 +126,7 @@ export async function sendTelegramMessageWithKeyboard(
   }
 
   if (!body.ok) {
+    if (body.error_code === 403) throw new TelegramBotBlockedError(chatId);
     logger.error(
       { chatId, errorCode: body.error_code, description: body.description },
       'Telegram sendMessage (keyboard) API error',
