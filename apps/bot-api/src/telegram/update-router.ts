@@ -50,7 +50,11 @@ async function dispatchText(
   const billingPhoneResponse = await handleBillingPhoneInput(text, userId, db, env, logger);
   if (billingPhoneResponse !== null) {
     logger.info({ userId }, 'Billing phone input handled');
-    await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: billingPhoneResponse.text }, logger);
+    await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+      chatId,
+      text: billingPhoneResponse.text,
+      ...(billingPhoneResponse.reply_markup ? { reply_markup: billingPhoneResponse.reply_markup } : {}),
+    }, logger);
     return;
   }
 
