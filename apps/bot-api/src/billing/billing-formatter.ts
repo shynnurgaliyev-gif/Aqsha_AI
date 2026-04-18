@@ -52,10 +52,54 @@ export const ASK_PHONE =
   `📱 Введите номер телефона для отправки счёта в Kaspi:\n\n` +
   `Формат: 87001234567 или +77001234567`;
 
+/** Shown when bot asks to re-enter phone number */
+export const ASK_PHONE_AGAIN =
+  `📱 Введите новый номер телефона:\n\n` +
+  `Формат: 87001234567 или +77001234567`;
+
 /** Shown when phone format is invalid */
 export const INVALID_PHONE =
   `❌ Неверный формат номера.\n\n` +
   `Введите номер в формате: 87001234567`;
+
+/** Format phone for display: 87001234567 → 8 (700) 123-45-67 */
+export function formatPhoneDisplay(phone: string): string {
+  if (phone.length === 11) {
+    return `${phone[0]} (${phone.slice(1, 4)}) ${phone.slice(4, 7)}-${phone.slice(7, 9)}-${phone.slice(9, 11)}`;
+  }
+  return phone;
+}
+
+/** Ask user to confirm newly entered phone before saving */
+export function CONFIRM_NEW_PHONE_MESSAGE(phone: string): string {
+  return (
+    `📱 Подтвердите номер телефона:\n\n` +
+    `${formatPhoneDisplay(phone)}\n\n` +
+    `Верно?`
+  );
+}
+
+export const CONFIRM_NEW_PHONE_KEYBOARD: InlineKeyboardMarkup = {
+  inline_keyboard: [[
+    { text: '✅ Да, верно',  callback_data: 'billing_confirm_phone' },
+    { text: '✏️ Изменить',  callback_data: 'billing_change_phone'  },
+  ]],
+};
+
+/** Ask user to use saved phone or change it */
+export function USE_SAVED_PHONE_MESSAGE(phone: string): string {
+  return (
+    `📱 Выставить счёт на номер:\n\n` +
+    `${formatPhoneDisplay(phone)}`
+  );
+}
+
+export const USE_SAVED_PHONE_KEYBOARD: InlineKeyboardMarkup = {
+  inline_keyboard: [[
+    { text: '✅ Да',              callback_data: 'billing_use_phone'    },
+    { text: '🔄 Сменить номер',  callback_data: 'billing_change_phone' },
+  ]],
+};
 
 /** Shown after invoice is successfully sent to Kaspi */
 export const INVOICE_SENT =

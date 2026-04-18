@@ -9,6 +9,9 @@ import { handleBillingCommand, type BotMessage } from './billing/billing-service
 import {
   handleBillingPayCallback,
   handleBillingPhoneInput,
+  handleBillingConfirmPhone,
+  handleBillingUsePhone,
+  handleBillingChangePhone,
 } from '../billing/billing-service';
 import { handleBudgetCommand } from './budgets/budget-handler';
 import { matchExportCommand, parseExportCallback, EXPORT_PERIOD_KEYBOARD } from './export/export-matcher';
@@ -300,10 +303,37 @@ export async function routeTelegramUpdate(
 
         const data = callbackQuery.data;
 
-        // ── Billing pay callback — accessible even when blocked ───────────────
+        // ── Billing callbacks — accessible even when blocked ─────────────────
         if (data === 'billing_pay') {
           const billingPayResponse = await handleBillingPayCallback(userId, db, env, logger);
-          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: billingPayResponse.text }, logger);
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+            chatId,
+            text: billingPayResponse.text,
+            ...(billingPayResponse.reply_markup ? { reply_markup: billingPayResponse.reply_markup } : {}),
+          }, logger);
+          break;
+        }
+        if (data === 'billing_confirm_phone') {
+          const result = await handleBillingConfirmPhone(userId, db, env, logger);
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+            chatId,
+            text: result.text,
+            ...(result.reply_markup ? { reply_markup: result.reply_markup } : {}),
+          }, logger);
+          break;
+        }
+        if (data === 'billing_use_phone') {
+          const result = await handleBillingUsePhone(userId, db, env, logger);
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+            chatId,
+            text: result.text,
+            ...(result.reply_markup ? { reply_markup: result.reply_markup } : {}),
+          }, logger);
+          break;
+        }
+        if (data === 'billing_change_phone') {
+          const result = await handleBillingChangePhone(userId, db, logger);
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: result.text }, logger);
           break;
         }
 
