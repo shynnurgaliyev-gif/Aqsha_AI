@@ -136,6 +136,31 @@ export async function handleBillingPhoneInput(
   env: AppEnv,
   logger: FastifyBaseLogger,
 ): Promise<BotMessage | null> {
+  // If user is in phone-confirm state and types affirmative/negative text
+  const confirmState = await getPendingPhoneConfirm(db, userId);
+  if (confirmState) {
+    const t = text.trim().toLowerCase();
+    const isYes = /^(да|yes|верно|ок|ok|подтверждаю)$/i.test(t) || t === '+';
+    const isNo  = /^(нет|no|нет|изменить|сменить|cancel|отмена)$/i.test(t);
+    if (isYes) {
+      await clearPendingPhoneConfirm(db, userId);
+      await saveUserPhone(db, userId, confirmState.phone);
+      logger.info({ userId }, 'Phone confirmed via text and saved');
+      return createInvoiceAndRespond(userId, confirmState.phone, db, env, logger);
+    }
+    if (isNo) {
+      await clearPendingPhoneConfirm(db, userId);
+      await setPendingBillingPhone(db, userId);
+      logger.info({ userId }, 'Phone rejected via text — asking again');
+      return { text: ASK_PHONE_AGAIN };
+    }
+    // Any other text while in confirm state — re-show the confirmation prompt
+    return {
+      text: CONFIRM_NEW_PHONE_MESSAGE(confirmState.phone),
+      reply_markup: CONFIRM_NEW_PHONE_KEYBOARD,
+    };
+  }
+
   const pending = await getPendingBillingPhone(db, userId);
   if (!pending) return null;
 
