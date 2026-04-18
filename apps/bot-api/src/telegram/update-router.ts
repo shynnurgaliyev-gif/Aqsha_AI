@@ -252,6 +252,19 @@ export async function routeTelegramUpdate(
           break;
         }
 
+        // ── Billing phone input — accessible even when blocked ─────────────────
+        // Expired users must be able to enter/confirm their phone to pay.
+        const billingPhoneResponse = await handleBillingPhoneInput(msg.text ?? '', userId, db, env, logger);
+        if (billingPhoneResponse !== null) {
+          logger.info({ userId }, 'Billing phone input handled (pre-gate)');
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+            chatId: msg.chat.id,
+            text: billingPhoneResponse.text,
+            ...(billingPhoneResponse.reply_markup ? { reply_markup: billingPhoneResponse.reply_markup } : {}),
+          }, logger);
+          break;
+        }
+
         // ── Access gate ────────────────────────────────────────────────────────
         if (checkSubscriptionAccess(currentPlanStatus) === 'blocked') {
           logger.info({ updateId: update.update_id, planStatus: currentPlanStatus }, 'Access blocked — paywall shown');
