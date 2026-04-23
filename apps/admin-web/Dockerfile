@@ -13,8 +13,10 @@ RUN pnpm install --frozen-lockfile
 # ── Build ─────────────────────────────────────────────────────────────────────
 FROM base AS builder
 WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/admin-web/node_modules ./apps/admin-web/node_modules
+COPY --from=deps /app/node_modules                        ./node_modules
+COPY --from=deps /app/packages/config/node_modules        ./packages/config/node_modules
+COPY --from=deps /app/packages/database/node_modules      ./packages/database/node_modules
+COPY --from=deps /app/apps/admin-web/node_modules         ./apps/admin-web/node_modules
 COPY . .
 
 # Build shared packages first
