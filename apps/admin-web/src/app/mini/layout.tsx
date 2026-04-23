@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from 'next';
-import Script from 'next/script';
 
 export const metadata: Metadata = {
   title: 'Aqsha AI',
@@ -14,14 +13,5 @@ export const viewport: Viewport = {
 };
 
 export default function MiniLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <>
-      {/* Telegram Mini App SDK — must load before React hydration */}
-      <Script
-        src="https://telegram.org/js/telegram-web-app.js"
-        strategy="beforeInteractive"
-      />
-      {children}
-    </>
-  );
+  return <>{children}</>;
 }
