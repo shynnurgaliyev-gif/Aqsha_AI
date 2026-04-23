@@ -5,30 +5,89 @@ import type { TransactionRow } from '../hooks/useMiniApp';
 
 function fmt(n: number) { return n.toLocaleString('ru-RU'); }
 
+function currentMonthRange(): { from: string; to: string } {
+  const now = new Date();
+  const from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  const to = now.toISOString().slice(0, 10);
+  return { from, to };
+}
+
 interface Props {
-  loadTransactions: () => Promise<TransactionRow[]>;
+  loadTransactions: (from: string, to: string) => Promise<TransactionRow[]>;
 }
 
 export function TransactionsScreen({ loadTransactions }: Props) {
+  const { from: defaultFrom, to: defaultTo } = currentMonthRange();
+
   const [txs, setTxs] = useState<TransactionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'expense' | 'income'>('all');
+  const [from, setFrom] = useState(defaultFrom);
+  const [to, setTo] = useState(defaultTo);
 
   useEffect(() => {
     setLoading(true);
-    loadTransactions()
+    loadTransactions(from, to)
       .then(setTxs)
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [loadTransactions]);
+  }, [loadTransactions, from, to]);
 
   const filtered = filter === 'all' ? txs : txs.filter((t) => t.kind === filter);
+
+  const totalExpense = txs.filter(t => t.kind === 'expense').reduce((s, t) => s + t.amount, 0);
+  const totalIncome  = txs.filter(t => t.kind === 'income').reduce((s, t) => s + t.amount, 0);
 
   return (
     <div className="mini-scroll mini-fadein">
       <div className="mini-header">
         <div className="mini-header-title">Операции</div>
       </div>
+
+      {/* Date range */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 0 10px' }}>
+        <input
+          type="date"
+          value={from}
+          onChange={(e) => setFrom(e.target.value)}
+          style={{
+            flex: 1, padding: '7px 10px', borderRadius: 10,
+            border: '1px solid var(--border)', background: 'var(--card-bg)',
+            color: 'var(--text)', fontSize: 13, outline: 'none',
+          }}
+        />
+        <span style={{ color: 'var(--hint)', fontSize: 14, flexShrink: 0 }}>—</span>
+        <input
+          type="date"
+          value={to}
+          onChange={(e) => setTo(e.target.value)}
+          style={{
+            flex: 1, padding: '7px 10px', borderRadius: 10,
+            border: '1px solid var(--border)', background: 'var(--card-bg)',
+            color: 'var(--text)', fontSize: 13, outline: 'none',
+          }}
+        />
+      </div>
+
+      {/* Period summary */}
+      {!loading && txs.length > 0 && (
+        <div style={{ display: 'flex', gap: 8, padding: '0 0 10px' }}>
+          <div style={{
+            flex: 1, background: 'var(--card-bg)', borderRadius: 10,
+            padding: '8px 12px', border: '1px solid var(--border)',
+          }}>
+            <div style={{ fontSize: 11, color: 'var(--hint)', marginBottom: 2 }}>Расходы</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--red)' }}>−{fmt(totalExpense)} ₸</div>
+          </div>
+          <div style={{
+            flex: 1, background: 'var(--card-bg)', borderRadius: 10,
+            padding: '8px 12px', border: '1px solid var(--border)',
+          }}>
+            <div style={{ fontSize: 11, color: 'var(--hint)', marginBottom: 2 }}>Доходы</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--green)' }}>+{fmt(totalIncome)} ₸</div>
+          </div>
+        </div>
+      )}
 
       {/* Filter tabs */}
       <div style={{ display: 'flex', gap: 8, padding: '0 0 12px', overflowX: 'auto' }}>
@@ -64,7 +123,7 @@ export function TransactionsScreen({ loadTransactions }: Props) {
       ) : filtered.length === 0 ? (
         <div className="mini-empty">
           <div className="mini-empty-icon">📭</div>
-          <div className="mini-empty-text">Нет операций</div>
+          <div className="mini-empty-text">Нет операций за период</div>
         </div>
       ) : (
         <div className="mini-card">

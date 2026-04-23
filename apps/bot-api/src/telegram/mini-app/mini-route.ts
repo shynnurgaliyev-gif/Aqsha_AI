@@ -144,10 +144,19 @@ export function createMiniAppRoute(env: AppEnv, db: DbPool) {
     });
 
     // ── GET /telegram/mini/transactions ──────────────────────────────────────
-    // Extended transaction list (last 50) for the transactions screen.
-    fastify.get('/telegram/mini/transactions', async (req, reply) => {
+    // Transaction list filtered by date range (?from=YYYY-MM-DD&to=YYYY-MM-DD).
+    // Defaults to current calendar month when params are omitted.
+    fastify.get<{ Querystring: { from?: string; to?: string } }>(
+      '/telegram/mini/transactions',
+      async (req, reply) => {
       const userId = await requireMiniAuth(db, req, reply);
       if (!userId) return;
+
+      const timezone = await getUserTimezone(db, userId);
+      const monthRange = resolvePeriodRange('current_month', timezone);
+
+      const from = req.query.from ?? monthRange.gte;
+      const to   = req.query.to   ?? new Date().toISOString().slice(0, 10);
 
       const rows = await db<{
         id: string;
@@ -169,8 +178,10 @@ export function createMiniAppRoute(env: AppEnv, db: DbPool) {
         WHERE t.user_id = ${userId}
           AND t.is_deleted = false
           AND t.parse_status IN ('confirmed', 'corrected')
+          AND t.transaction_date_local >= ${from}::date
+          AND t.transaction_date_local <= ${to}::date
         ORDER BY t.transaction_at DESC
-        LIMIT 50
+        LIMIT 500
       `;
 
       return reply.send({

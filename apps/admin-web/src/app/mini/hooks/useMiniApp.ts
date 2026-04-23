@@ -204,11 +204,12 @@ export function useMiniApp() {
     }
   }, [authenticate, planStatus]);
 
-  // Load full transactions list for transactions tab
-  const loadTransactions = useCallback(async (): Promise<TransactionRow[]> => {
-    const res = await fetch(`${API}/telegram/mini/transactions`, {
-      headers: miniHeaders(),
-    });
+  // Load transactions for a date range (YYYY-MM-DD)
+  const loadTransactions = useCallback(async (from: string, to: string): Promise<TransactionRow[]> => {
+    const res = await fetch(
+      `${API}/telegram/mini/transactions?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+      { headers: miniHeaders() },
+    );
     const json = await res.json() as { ok: boolean; transactions: TransactionRow[] };
     return json.transactions ?? [];
   }, []);
