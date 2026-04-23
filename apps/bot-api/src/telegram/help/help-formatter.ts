@@ -65,6 +65,15 @@ export const HELP_MESSAGE = `📖 *Справка по командам Aqsha*
 
 ━━━━━━━━━━━━━━━━━━━━━━`;
 
+/** Inline keyboard with Mini App button. Returns null if MINIAPP_URL is not set. */
+export function miniAppKeyboard(miniAppUrl: string): { inline_keyboard: { text: string; web_app: { url: string } }[][] } {
+  return {
+    inline_keyboard: [[
+      { text: '📊 Открыть аналитику', web_app: { url: miniAppUrl } },
+    ]],
+  };
+}
+
 /** Returns true if the message is a help request. */
 export function matchHelpCommand(text: string): boolean {
   const t = text.trim().toLowerCase().replace(/[.!?,;]+$/, '');

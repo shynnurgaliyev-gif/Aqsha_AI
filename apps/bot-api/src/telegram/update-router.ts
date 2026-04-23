@@ -31,7 +31,7 @@ import { getPendingDraft, clearPendingDraft, getPendingBulkDraft, clearPendingBu
 import { insertConfirmedTransaction, insertConfirmedBulkTransactions } from './text-intake/transaction-inserter';
 import { getBudgetStatus } from './budgets/budget-repository';
 import { formatBudgetAlert } from './budgets/budget-formatter';
-import { matchHelpCommand, ONBOARDING_MESSAGE, HELP_MESSAGE } from './help/help-formatter';
+import { matchHelpCommand, ONBOARDING_MESSAGE, HELP_MESSAGE, miniAppKeyboard } from './help/help-formatter';
 
 /**
  * Full routing pipeline for any text (typed or voice-transcribed).
@@ -70,7 +70,11 @@ async function dispatchText(
 
   // ── Help command ─────────────────────────────────────────────────────────────
   if (matchHelpCommand(text)) {
-    await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: HELP_MESSAGE }, logger);
+    await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+      chatId,
+      text: HELP_MESSAGE,
+      ...(env.TELEGRAM_MINIAPP_URL ? { reply_markup: miniAppKeyboard(env.TELEGRAM_MINIAPP_URL) } : {}),
+    }, logger);
     return;
   }
 
@@ -237,7 +241,11 @@ export async function routeTelegramUpdate(
         // ── /start command ─────────────────────────────────────────────────────
         // Treat /start as a greeting so the bot responds warmly, not with "unsupported".
         if (msg.text?.trim() === '/start') {
-          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: ONBOARDING_MESSAGE }, logger);
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+            chatId: msg.chat.id,
+            text: ONBOARDING_MESSAGE,
+            ...(env.TELEGRAM_MINIAPP_URL ? { reply_markup: miniAppKeyboard(env.TELEGRAM_MINIAPP_URL) } : {}),
+          }, logger);
           break;
         }
 

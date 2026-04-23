@@ -24,6 +24,8 @@ const envSchema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().min(1),
   TELEGRAM_WEBHOOK_SECRET: z.string().min(1).optional(),
   TELEGRAM_WEBHOOK_URL: z.string().url().optional(),
+  TELEGRAM_BOT_USERNAME: z.string().default('AqshaAiBot'),
+  TELEGRAM_MINIAPP_URL: z.string().url().optional(), // e.g. https://aqsha-web.onrender.com/mini
 
   // ── Database ─────────────────────────────────────────────────────────────
   DATABASE_URL: z.string().min(1),

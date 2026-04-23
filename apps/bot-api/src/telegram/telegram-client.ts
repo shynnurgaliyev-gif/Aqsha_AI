@@ -1,9 +1,8 @@
 import type { FastifyBaseLogger } from 'fastify';
 
-export interface InlineKeyboardButton {
-  text: string;
-  callback_data: string;
-}
+export type InlineKeyboardButton =
+  | { text: string; callback_data: string }
+  | { text: string; web_app: { url: string } };
 
 export interface InlineKeyboardMarkup {
   inline_keyboard: InlineKeyboardButton[][];

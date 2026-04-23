@@ -7,6 +7,7 @@
 # Services defined here:
 #   - aqsha-ai-bot-api  (web service — Telegram webhook + HTTP)
 #   - aqsha-ai-worker   (background worker — job queue + scheduler)
+#   - aqsha-ai-web      (web service — Telegram Mini App + admin UI)
 #
 # admin-web is not included yet (not implemented).
 
@@ -177,3 +178,15 @@ services:
         value: 7
       - key: MONTHLY_PRICE_KZT
         value: 800
+
+
+  # ── Telegram Mini App / Web UI ───────────────────────────────────────────────
+  - type: web
+    name: aqsha-ai-web
+    env: docker
+    dockerfilePath: ./apps/admin-web/Dockerfile
+    dockerContext: .
+    healthCheckPath: /
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        sync: false   # set to https://aqsha-ai-bot-api.onrender.com
