@@ -83,6 +83,6 @@ export const config = {
      *   /_next/*     — Next.js static assets and image optimisation
      *   /favicon.ico — browser favicon request
      */
-    '/((?!api/health|_next/static|_next/image|favicon\\.ico).*)',
+    '/((?!api/health|mini|_next/static|_next/image|favicon\\.ico).*)',
   ],
 };
