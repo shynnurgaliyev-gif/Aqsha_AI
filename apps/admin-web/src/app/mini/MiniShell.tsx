@@ -76,6 +76,17 @@ export function MiniShell() {
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <MiniLoader />
           </div>
+        ) : !data && !loading ? (
+          <div className="mini-empty" style={{ flex: 1, paddingTop: '30vh' }}>
+            <div className="mini-empty-icon">📡</div>
+            <div className="mini-empty-text">Нет данных</div>
+            <button
+              onClick={reload}
+              style={{ marginTop: 16, padding: '8px 20px', borderRadius: 20, border: 'none', background: 'var(--accent)', color: '#fff', cursor: 'pointer', fontSize: 14 }}
+            >
+              Повторить
+            </button>
+          </div>
         ) : data ? (
           <>
             {tab === 'dashboard' && (

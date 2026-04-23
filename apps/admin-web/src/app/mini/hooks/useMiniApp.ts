@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getTelegramWebApp } from '@/lib/telegram';
 
-const API = process.env['NEXT_PUBLIC_API_URL'] ?? '';
+const API = (process.env['NEXT_PUBLIC_API_URL'] ?? 'https://aqsha-ai-bot-api.onrender.com').replace(/\/$/, '');
 const TOKEN_KEY = 'aqsha_mini_token';
 const TOKEN_EXP_KEY = 'aqsha_mini_token_exp';
 
@@ -186,13 +186,19 @@ export function useMiniApp() {
         authenticate();
         return;
       }
-      const json = await res.json() as { ok: boolean } & MiniData;
-      if (json.ok) {
-        setData(json);
-        setPlanStatus(json.subscription?.status ?? planStatus);
+      if (!res.ok) {
+        setError(`Ошибка сервера: ${res.status}`);
+        return;
       }
+      const json = await res.json() as { ok: boolean; error?: string } & MiniData;
+      if (!json.ok) {
+        setError(json.error ?? 'Ошибка загрузки данных');
+        return;
+      }
+      setData(json);
+      setPlanStatus(json.subscription?.status ?? planStatus);
     } catch {
-      setError('Не удалось загрузить данные');
+      setError('Не удалось подключиться к серверу');
     } finally {
       setLoading(false);
     }

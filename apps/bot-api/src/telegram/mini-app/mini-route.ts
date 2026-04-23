@@ -123,7 +123,14 @@ export function createMiniAppRoute(env: AppEnv, db: DbPool) {
           range: monthRange,
         },
         categories,
-        transactions,
+        transactions: transactions.map((t, i) => ({
+          id: String(i),
+          kind: t.kind,
+          amount: t.amount,
+          categoryName: t.categoryName,
+          rawText: null,
+          date: t.transactionDateLocal,
+        })),
         recurring,
         goals,
         subscription: subscription
