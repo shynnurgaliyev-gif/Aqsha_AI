@@ -186,7 +186,11 @@ services:
     env: docker
     dockerfilePath: ./apps/admin-web/Dockerfile
     dockerContext: .
-    healthCheckPath: /
+    healthCheckPath: /mini   # /mini is client-side only — no DB required
     envVars:
       - key: NEXT_PUBLIC_API_URL
         sync: false   # set to https://aqsha-ai-bot-api.onrender.com
+      - key: DATABASE_URL
+        sync: false   # Supabase pooler URL — needed for admin dashboard at /
+      - key: DATABASE_DIRECT_URL
+        sync: false
