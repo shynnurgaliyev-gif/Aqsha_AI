@@ -8,6 +8,7 @@ import { runWeeklyReportScheduler } from './weekly-reports/scheduler';
 import { runGraceReminderScheduler } from './billing/grace-scheduler';
 import { runTrialExpiryReminderScheduler } from './billing/trial-expiry-scheduler';
 import { runGraceFinalReminderScheduler } from './billing/grace-final-scheduler';
+import { runTrial2DayReminderScheduler } from './billing/trial-2day-scheduler';
 import { runRecurringReminderScheduler } from './recurring-reminders/scheduler';
 
 export interface WorkerInstance {
@@ -43,6 +44,7 @@ export function createWorker(env: AppEnv, db: DbPool): WorkerInstance {
       await runDailyRecommendationScheduler(db, logger);
       await runWeeklyReportScheduler(db, logger);
       await runGraceReminderScheduler(db, logger);
+      await runTrial2DayReminderScheduler(db, logger);
       await runTrialExpiryReminderScheduler(db, logger);
       await runGraceFinalReminderScheduler(db, logger);
       await runRecurringReminderScheduler(db, logger);
