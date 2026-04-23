@@ -12,7 +12,7 @@ import { ProfileScreen } from './screens/ProfileScreen';
 import { getTelegramWebApp } from '@/lib/telegram';
 
 export function MiniShell() {
-  const { phase, tab, setTab, firstName, data, loading, error, reload, loadTransactions } = useMiniApp();
+  const { phase, tab, setTab, firstName, data, loading, error, reload, loadAnalytics, loadTransactions } = useMiniApp();
 
   // Expand to full height when shell is ready
   useEffect(() => {
@@ -96,7 +96,7 @@ export function MiniShell() {
               <TransactionsScreen loadTransactions={loadTransactions} />
             )}
             {tab === 'analytics' && (
-              <AnalyticsScreen data={data} />
+              <AnalyticsScreen data={data} loadAnalytics={loadAnalytics} />
             )}
             {tab === 'profile' && (
               <ProfileScreen data={data} firstName={firstName} />

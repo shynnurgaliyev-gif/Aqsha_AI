@@ -5,7 +5,7 @@ import { verifyTelegramInitData } from './mini-auth';
 import { createMiniSession, getMiniSessionUserId } from './mini-session';
 import { queryBalance, queryPeriodTotal, queryCategoryBreakdownByPeriod, queryRecentTransactions } from '../analytics/analytics-repository';
 import { getUserTimezone } from '../analytics/analytics-repository';
-import { resolvePeriodRange } from '../analytics/period-resolver';
+import { resolvePeriodRange, type DateRange } from '../analytics/period-resolver';
 import { listRecurringExpenses } from '../recurring/recurring-repository';
 import { listGoals } from '../goals/goal-repository';
 import { getCurrentSubscriptionInfo } from '../../billing/billing-repository';
@@ -196,5 +196,51 @@ export function createMiniAppRoute(env: AppEnv, db: DbPool) {
         })),
       });
     });
+
+    // ── GET /telegram/mini/analytics ─────────────────────────────────────────
+    // Analytics for a specific month: ?month=YYYY-MM  (defaults to current).
+    fastify.get<{ Querystring: { month?: string } }>(
+      '/telegram/mini/analytics',
+      async (req, reply) => {
+        const userId = await requireMiniAuth(db, req, reply);
+        if (!userId) return;
+
+        const now = new Date();
+        const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        const month = req.query.month ?? defaultMonth;
+
+        if (!/^\d{4}-\d{2}$/.test(month)) {
+          return reply.status(400).send({ ok: false, error: 'Invalid month format, use YYYY-MM' });
+        }
+
+        const [yearStr, monStr] = month.split('-');
+        const year = Number(yearStr);
+        const mon  = Number(monStr); // 1-based
+
+        // Current month range  [YYYY-MM-01, next month 01)
+        const rangeGte  = `${year}-${String(mon).padStart(2, '0')}-01`;
+        const nextD     = new Date(year, mon, 1); // Date month is 0-based → mon = next month
+        const rangeLt   = `${nextD.getFullYear()}-${String(nextD.getMonth() + 1).padStart(2, '0')}-01`;
+        const range: DateRange = { gte: rangeGte, lt: rangeLt };
+
+        // Previous month range
+        const prevD    = new Date(year, mon - 2, 1); // mon-2 because month is 1-based
+        const prevGte  = `${prevD.getFullYear()}-${String(prevD.getMonth() + 1).padStart(2, '0')}-01`;
+        const prevRange: DateRange = { gte: prevGte, lt: rangeGte };
+
+        const [expense, income, prevExpense, categories] = await Promise.all([
+          queryPeriodTotal(db, userId, 'expense', range),
+          queryPeriodTotal(db, userId, 'income', range),
+          queryPeriodTotal(db, userId, 'expense', prevRange),
+          queryCategoryBreakdownByPeriod(db, userId, 'expense', range),
+        ]);
+
+        return reply.send({
+          ok: true,
+          month: { expense, income, prevExpense, range, label: month },
+          categories,
+        });
+      },
+    );
   };
 }

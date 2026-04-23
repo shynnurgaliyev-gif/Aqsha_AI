@@ -60,6 +60,11 @@ export interface SubscriptionInfo {
   daysLeft: number;
 }
 
+export interface AnalyticsData {
+  month: MonthSummary & { label: string };
+  categories: CategoryRow[];
+}
+
 export interface MiniData {
   balance: BalanceSummary;
   month: MonthSummary;
@@ -204,6 +209,21 @@ export function useMiniApp() {
     }
   }, [authenticate, planStatus]);
 
+  // Load analytics for a specific month (YYYY-MM)
+  const loadAnalytics = useCallback(async (month: string): Promise<AnalyticsData | null> => {
+    try {
+      const res = await fetch(
+        `${API}/telegram/mini/analytics?month=${encodeURIComponent(month)}`,
+        { headers: miniHeaders() },
+      );
+      if (!res.ok) return null;
+      const json = await res.json() as { ok: boolean } & AnalyticsData;
+      return json.ok ? json : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
   // Load transactions for a date range (YYYY-MM-DD)
   const loadTransactions = useCallback(async (from: string, to: string): Promise<TransactionRow[]> => {
     const res = await fetch(
@@ -234,6 +254,7 @@ export function useMiniApp() {
     loading,
     error,
     reload: loadData,
+    loadAnalytics,
     loadTransactions,
   };
 }
