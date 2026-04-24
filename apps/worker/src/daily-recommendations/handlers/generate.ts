@@ -68,12 +68,19 @@ export const dailyRecommendationGenerateHandler: JobHandler = async (job, ctx) =
   const topExpenseCategories = await loadTopExpenseCategories(db, userId, user.timezone);
 
   // ── 4. Format message ─────────────────────────────────────────────────────
+  const localHour = Number(new Intl.DateTimeFormat('en-US', {
+    timeZone: user.timezone,
+    hour: 'numeric',
+    hour12: false,
+  }).format(new Date()));
+
   const messageText = formatRecommendationMessage({
     balance: stats.balance,
     monthExpenses: stats.monthExpenses,
     monthIncome: stats.monthIncome,
     safeDailySpend,
     daysRemaining,
+    localHour,
     budgetSignals,
     topExpenseCategories,
   });

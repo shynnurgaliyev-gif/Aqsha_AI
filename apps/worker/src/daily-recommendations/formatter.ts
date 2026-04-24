@@ -5,12 +5,20 @@ function fmt(amount: number): string {
   return amount.toLocaleString('ru-RU') + ' ₸';
 }
 
+function getGreeting(localHour: number): string {
+  if (localHour >= 5 && localHour < 12) return 'Доброе утро! ☀️';
+  if (localHour >= 12 && localHour < 18) return 'Добрый день! ☀️';
+  if (localHour >= 18 && localHour < 23) return 'Добрый вечер! 🌆';
+  return 'Доброй ночи! 🌙';
+}
+
 export interface RecommendationParams {
   balance: number;
   monthExpenses: number;
   monthIncome: number;
   safeDailySpend: number;
   daysRemaining: number;
+  localHour: number;
   budgetSignals?: BudgetSignal[];
   topExpenseCategories?: TopExpenseCategoryRow[];
 }
@@ -19,7 +27,7 @@ export interface RecommendationParams {
  * Formats a personalized daily recommendation message.
  *
  * Structure:
- *   Доброе утро! ☀️
+ *   [time-aware greeting]
  *   До конца месяца у вас осталось X ₸.
  *   Это около X ₸ в день.
  *   [category insight — over-budget / near-limit / top spender]
@@ -27,11 +35,15 @@ export interface RecommendationParams {
 export function formatRecommendationMessage(params: RecommendationParams): string {
   const lines: string[] = [];
 
-  lines.push('Доброе утро! ☀️');
+  lines.push(getGreeting(params.localHour));
   lines.push('');
 
   // ── Balance / daily spend ─────────────────────────────────────────────────
-  if (params.balance <= 0) {
+  const hasNoRecords = params.monthExpenses === 0 && params.monthIncome === 0;
+  if (hasNoRecords) {
+    lines.push('Вы ещё не добавили ни одной записи в этом месяце.');
+    lines.push('Начните записывать расходы голосом или текстом — я помогу вести учёт!');
+  } else if (params.balance <= 0) {
     lines.push('Баланс на нуле или в минусе. Постарайтесь не тратить лишнего.');
   } else {
     lines.push(`До конца месяца у вас осталось ${fmt(params.balance)}.`);
