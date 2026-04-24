@@ -135,7 +135,7 @@ export function TransactionsScreen({ loadTransactions }: Props) {
               <div className="mini-tx-info">
                 <div className="mini-tx-cat">{tx.categoryName}</div>
                 {tx.rawText && (
-                  <div className="mini-tx-date" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px' }}>
+                  <div className="mini-tx-date" style={{ wordBreak: 'break-word' }}>
                     {tx.rawText}
                   </div>
                 )}
