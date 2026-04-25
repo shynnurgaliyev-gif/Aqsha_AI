@@ -44,7 +44,7 @@ async function findUsersNeedingWeeklyReportJob(db: DbPool): Promise<EligibleUser
         FROM public.job_queue jq
         WHERE jq.user_id  = u.id
           AND jq.job_type = 'weekly_report_generate'
-          AND jq.status   IN ('pending', 'processing')
+          AND jq.status   IN ('pending', 'processing', 'done')
           AND jq.created_at >= (now()::date)::timestamptz
       )
   `;
