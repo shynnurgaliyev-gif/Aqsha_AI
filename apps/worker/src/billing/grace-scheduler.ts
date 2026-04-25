@@ -34,7 +34,7 @@ async function findUsersNeedingGraceReminder(db: DbPool): Promise<GraceUser[]> {
         FROM public.job_queue jq
         WHERE jq.user_id = u.id
           AND jq.job_type = 'grace_reminder_send'
-          AND jq.status IN ('pending', 'processing')
+          AND jq.status IN ('pending', 'processing', 'done')
           AND jq.created_at >= (
             (now() AT TIME ZONE COALESCE(NULLIF(u.timezone, ''), 'UTC'))::date
           )::timestamptz

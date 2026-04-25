@@ -44,7 +44,7 @@ async function findUsersNeedingGenerationJob(db: DbPool): Promise<EligibleUser[]
         FROM public.job_queue jq
         WHERE jq.user_id = u.id
           AND jq.job_type = 'daily_recommendation_generate'
-          AND jq.status IN ('pending', 'processing')
+          AND jq.status IN ('pending', 'processing', 'done')
           AND jq.created_at >= (now()::date)::timestamptz
       )
   `;
