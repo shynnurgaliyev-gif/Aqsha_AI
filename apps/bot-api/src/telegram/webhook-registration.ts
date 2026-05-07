@@ -37,6 +37,7 @@ async function callTelegramApi(botToken: string, method: string, body: Record<st
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10_000),
     });
   } catch (err) {
     throw new Error(`Telegram ${method} network error: ${String(err)}`);

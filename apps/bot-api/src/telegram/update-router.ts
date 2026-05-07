@@ -23,6 +23,12 @@ import { handleRecurringCommand, handleRecurringTimeCallback, handleRecurringRec
 import { handleResetFlow } from './reset/reset-handler';
 import { handleTextMessage, CONFIRMATION_KEYBOARD } from './text-intake/handler';
 import { getVoiceTranscript } from './voice-intake/handler';
+import {
+  checkAndConsumeVoiceQuota,
+  formatVoiceQuotaExceededMessage,
+  getVoiceDurationLimit,
+  formatVoiceTooLongMessage,
+} from './voice-intake/quota';
 import { handleAnalyticsQuery } from './analytics/handler';
 import { handleChat } from './chat/chat-handler';
 import { getChatHistory, setChatHistory } from './chat/chat-session';
@@ -299,6 +305,49 @@ export async function routeTelegramUpdate(
         if (checkSubscriptionAccess(currentPlanStatus) === 'blocked') {
           logger.info({ updateId: update.update_id, planStatus: currentPlanStatus }, 'Access blocked — paywall shown');
           await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId: msg.chat.id, text: PAYWALL_MESSAGE }, logger);
+          break;
+        }
+
+        // ── Per-message duration cap ──────────────────────────────────────────
+        // Cheaper than the DB quota check — runs first. Telegram always sets
+        // voice.duration on voice notes; treat a missing/invalid value as
+        // refusable rather than implicitly trusted.
+        const duration = msg.voice?.duration;
+        if (typeof duration !== 'number' || !Number.isFinite(duration) || duration <= 0) {
+          logger.warn({ updateId: update.update_id, userId, duration }, 'Voice duration missing or invalid');
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+            chatId: msg.chat.id,
+            text: 'Не удалось определить длительность голосового сообщения. Попробуйте ещё раз.',
+          }, logger);
+          break;
+        }
+        const durationLimit = getVoiceDurationLimit(
+          currentPlanStatus,
+          env.TRIAL_VOICE_MAX_DURATION_SEC,
+          env.PAID_VOICE_MAX_DURATION_SEC,
+        );
+        if (duration > durationLimit.maxSeconds) {
+          logger.info(
+            { updateId: update.update_id, userId, duration, limit: durationLimit.maxSeconds, isTrial: durationLimit.isTrial },
+            'Voice too long for plan',
+          );
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+            chatId: msg.chat.id,
+            text: formatVoiceTooLongMessage(duration, durationLimit.maxSeconds, durationLimit.isTrial),
+          }, logger);
+          break;
+        }
+
+        // ── Voice quota (trial users only) ────────────────────────────────────
+        // Consume the slot BEFORE Whisper so failed/abusive uploads still count.
+        // active/grace/pending plans are exempt and incur no DB write.
+        const quota = await checkAndConsumeVoiceQuota(db, userId, currentPlanStatus, env.TRIAL_VOICE_DAILY_LIMIT);
+        if (!quota.allowed) {
+          logger.info({ updateId: update.update_id, userId, limit: quota.limit }, 'Voice quota exceeded');
+          await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+            chatId: msg.chat.id,
+            text: formatVoiceQuotaExceededMessage(quota.limit),
+          }, logger);
           break;
         }
 

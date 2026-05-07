@@ -29,17 +29,27 @@ export async function createMiniSession(db: DbPool, userId: string): Promise<str
 }
 
 /**
- * Resolves a raw token to its user_id.
- * Returns null if the token is not found or has expired.
+ * Resolves a raw token to user_id + the user's current_plan_status in one query.
+ * Returns null if the token is not found, has expired, or the user is inactive.
+ *
+ * Used by the Mini App access gate so an existing token cannot keep accessing
+ * data after the user's plan moves to expired/blocked/canceled.
  */
-export async function getMiniSessionUserId(db: DbPool, rawToken: string): Promise<string | null> {
+export async function getMiniSessionContext(
+  db: DbPool,
+  rawToken: string,
+): Promise<{ userId: string; currentPlanStatus: string } | null> {
   if (!rawToken || rawToken.length < 16) return null;
   const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-  const rows = await db<{ user_id: string }[]>`
-    SELECT user_id::text
-      FROM public.mini_sessions
-     WHERE token_hash = ${tokenHash}
-       AND expires_at > now()
+  const rows = await db<{ user_id: string; current_plan_status: string }[]>`
+    SELECT s.user_id::text, u.current_plan_status
+      FROM public.mini_sessions s
+      JOIN public.users u ON u.id = s.user_id
+     WHERE s.token_hash = ${tokenHash}
+       AND s.expires_at > now()
+       AND u.is_active = true
   `;
-  return rows[0]?.user_id ?? null;
+  const row = rows[0];
+  if (!row) return null;
+  return { userId: row.user_id, currentPlanStatus: row.current_plan_status };
 }

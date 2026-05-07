@@ -12,7 +12,7 @@ import { ProfileScreen } from './screens/ProfileScreen';
 import { getTelegramWebApp } from '@/lib/telegram';
 
 export function MiniShell() {
-  const { phase, tab, setTab, firstName, data, loading, error, reload, loadAnalytics, loadTransactions } = useMiniApp();
+  const { phase, tab, setTab, firstName, planStatus, data, loading, error, reload, loadAnalytics, loadTransactions } = useMiniApp();
 
   // Expand to full height when shell is ready
   useEffect(() => {
@@ -36,6 +36,30 @@ export function MiniShell() {
           </div>
           <div className="mini-empty-text">
             Напишите боту <strong>@AqshaAiBot</strong>, чтобы начать
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (phase === 'paywall') {
+    const statusLabel = planStatus === 'expired' ? 'Подписка истекла'
+      : planStatus === 'canceled' ? 'Подписка отменена'
+      : planStatus === 'blocked' ? 'Доступ ограничён'
+      : 'Подписка не активна';
+    return (
+      <div className="mini-root">
+        <MiniStyles />
+        <div className="mini-empty" style={{ paddingTop: '35vh' }}>
+          <div className="mini-empty-icon">🔒</div>
+          <div className="mini-empty-text" style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
+            {statusLabel}
+          </div>
+          <div className="mini-empty-text" style={{ marginBottom: 16 }}>
+            Оформите подписку в боте, чтобы открыть аналитику и историю операций.
+          </div>
+          <div className="mini-empty-text" style={{ fontSize: 13, opacity: 0.7 }}>
+            Напишите <strong>«оплатить»</strong> в чат с ботом.
           </div>
         </div>
       </div>

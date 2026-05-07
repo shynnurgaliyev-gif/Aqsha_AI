@@ -1,4 +1,5 @@
 import type { FastifyBaseLogger } from 'fastify';
+import { fetchWithRetry } from '@aqsha-ai/shared';
 import type { ChatMessage } from './chat-session';
 
 /**
@@ -65,23 +66,33 @@ export async function handleChat(
   const newUserMessage: ChatMessage = { role: 'user', content: text };
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
+    // Tight retry budget: this is in the webhook hot path. One retry only,
+    // 8s per attempt → worst case ~17s before the fallback kicks in.
+    const response = await fetchWithRetry(
+      'https://api.openai.com/v1/chat/completions',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            ...history,
+            newUserMessage,
+          ],
+          max_tokens: 200,
+          temperature: 0.75,
+        }),
       },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          ...history,
-          newUserMessage,
-        ],
-        max_tokens: 200,
-        temperature: 0.75,
-      }),
-    });
+      {
+        timeoutMs: 8_000,
+        retries: 1,
+        onRetry: (info) => logger.warn(info, 'chat handler retry'),
+      },
+    );
 
     if (!response.ok) {
       logger.warn({ status: response.status }, 'Chat handler: OpenAI error, using fallback');

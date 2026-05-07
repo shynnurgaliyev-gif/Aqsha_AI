@@ -42,6 +42,7 @@ export async function sendMessage(
         text: params.text,
         ...(params.reply_markup ? { reply_markup: params.reply_markup } : {}),
       }),
+      signal: AbortSignal.timeout(10_000),
     });
   } catch (err) {
     logger.error({ err, chatId: params.chatId }, 'Telegram sendMessage network error');
@@ -88,7 +89,7 @@ export async function sendDocument(
 
   let response: Response;
   try {
-    response = await fetch(url, { method: 'POST', body: form });
+    response = await fetch(url, { method: 'POST', body: form, signal: AbortSignal.timeout(20_000) });
   } catch (err) {
     logger.error({ err, chatId: params.chatId }, 'Telegram sendDocument network error');
     return;
@@ -133,6 +134,7 @@ export async function answerCallbackQuery(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ callback_query_id: callbackQueryId }),
+      signal: AbortSignal.timeout(10_000),
     });
   } catch (err) {
     logger.error({ err, callbackQueryId }, 'Telegram answerCallbackQuery network error');

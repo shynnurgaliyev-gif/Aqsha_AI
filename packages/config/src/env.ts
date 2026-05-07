@@ -10,7 +10,7 @@ const envBool = (defaultValue: boolean) =>
     .default(defaultValue ? 'true' : 'false')
     .transform((v) => v === 'true' || v === '1');
 
-const envSchema = z.object({
+const baseSchema = z.object({
   // ── Runtime ──────────────────────────────────────────────────────────────
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 
@@ -41,7 +41,17 @@ const envSchema = z.object({
 
   // ── Voice ────────────────────────────────────────────────────────────────
   FFMPEG_PATH: z.string().default('ffmpeg'),
-  MAX_VOICE_FILE_SIZE_MB: z.coerce.number().int().positive().default(20),
+  // Hard ceiling on the binary size of a single voice payload.
+  // 10 MB ≈ 25-40 min of typical Telegram OGG/Opus — well above the duration
+  // limits below, but a safety net against malformed / repacked uploads.
+  MAX_VOICE_FILE_SIZE_MB: z.coerce.number().int().positive().default(10),
+  // Daily transcription quota for trial users (per user, in their local TZ).
+  // active / grace / pending users are unlimited.
+  TRIAL_VOICE_DAILY_LIMIT: z.coerce.number().int().positive().default(10),
+  // Duration ceiling per voice message (seconds). Hard cap on Whisper cost
+  // per call. Trial = 1.5 min, paid = 15 min.
+  TRIAL_VOICE_MAX_DURATION_SEC: z.coerce.number().int().positive().default(90),
+  PAID_VOICE_MAX_DURATION_SEC: z.coerce.number().int().positive().default(900),
 
   // ── Worker / Jobs ────────────────────────────────────────────────────────
   JOB_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(5000),
@@ -71,7 +81,42 @@ const envSchema = z.object({
   KASPI_TEST_MODE: envBool(false),
 });
 
-export type AppEnv = z.infer<typeof envSchema>;
+/**
+ * Cross-field validation: when a billing provider is selected for real
+ * (non-test mode), require its credentials to be present. Catches deploy
+ * misconfigurations at startup instead of silently failing on the first
+ * payment webhook.
+ */
+const envSchema = baseSchema.superRefine((env, ctx) => {
+  if (env.BILLING_PROVIDER === 'kaspi_qr' && !env.KASPI_TEST_MODE) {
+    if (!env.KASPI_API_KEY) {
+      ctx.addIssue({
+        path: ['KASPI_API_KEY'],
+        code: z.ZodIssueCode.custom,
+        message: 'required when BILLING_PROVIDER=kaspi_qr and KASPI_TEST_MODE is false',
+      });
+    }
+    if (!env.KASPI_WEBHOOK_SECRET) {
+      ctx.addIssue({
+        path: ['KASPI_WEBHOOK_SECRET'],
+        code: z.ZodIssueCode.custom,
+        message: 'required when BILLING_PROVIDER=kaspi_qr and KASPI_TEST_MODE is false',
+      });
+    }
+  }
+
+  // Mini App API origin must be explicit in production — refuses to fall back
+  // to '*' which would let any origin call the Mini App API with credentials.
+  if (env.NODE_ENV === 'production' && !env.TELEGRAM_MINIAPP_URL) {
+    ctx.addIssue({
+      path: ['TELEGRAM_MINIAPP_URL'],
+      code: z.ZodIssueCode.custom,
+      message: 'required in production — Mini App CORS origin must be explicit',
+    });
+  }
+});
+
+export type AppEnv = z.infer<typeof baseSchema>;
 
 /**
  * Validates and parses environment variables against the schema.

@@ -102,6 +102,19 @@ export async function handleTextMessage(
     return { kind: 'unsupported', message: 'Пустое сообщение.' };
   }
 
+  // Hard cap on user input before any LLM call.
+  // 1000 chars covers any realistic transaction or analytics query; longer
+  // input is almost always pasted text or abuse and would burn OpenAI tokens
+  // without producing a parseable transaction.
+  const MAX_INPUT_CHARS = 1000;
+  if (text.length > MAX_INPUT_CHARS) {
+    logger.warn({ userId, length: text.length }, 'Text input too long — refusing');
+    return {
+      kind: 'rejected',
+      message: `Сообщение слишком длинное (${text.length} символов). Максимум ${MAX_INPUT_CHARS}.\n\nПопробуйте сократить или разбейте на несколько сообщений.`,
+    };
+  }
+
   // ── A. Pending draft path ────────────────────────────────────────────────────
   // Check bulk draft first, then single draft.
   const pendingBulkDraft = await getPendingBulkDraft(db, userId);

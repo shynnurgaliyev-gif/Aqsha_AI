@@ -46,6 +46,13 @@ export async function findUserByInvoice(
  * Activates a paid subscription:
  *   1. Updates users.current_plan_status → 'active' for 30 days.
  *   2. Marks the payment as paid.
+ *
+ * Both updates run inside a single transaction so the user is never marked
+ * active without the corresponding payment also being marked paid (and vice
+ * versa). Without this, a transient failure on the second UPDATE would leave
+ * the user paid-state but the payment row stuck in 'pending', which would
+ * keep `findUserByInvoice` returning a hit on webhook retries and re-extend
+ * the subscription period.
  */
 export async function activateSubscription(
   db: DbPool,
@@ -56,24 +63,31 @@ export async function activateSubscription(
     amountKzt: number;
   },
 ): Promise<void> {
-  // Activate subscription directly on users table
-  await db`
-    UPDATE public.users
-       SET current_plan_status = 'active',
-           current_period_end  = now() + interval '30 days',
-           grace_period_end    = NULL,
-           updated_at          = now()
-     WHERE id = ${params.userId}
-  `;
+  // Cast tx → DbPool: postgres.js's TransactionSql extends Sql via Omit,
+  // which strips the overloaded call signatures. The runtime behaviour is
+  // identical to the outer pool for tagged-template queries.
+  await db.begin(async (txRaw) => {
+    const tx = txRaw as unknown as DbPool;
 
-  // Mark payment as paid
-  await db`
-    UPDATE public.payments
-       SET status   = 'paid',
-           paid_at  = now()
-     WHERE provider             = ${params.provider}
-       AND provider_invoice_id  = ${params.invoiceId}
-  `;
+    // Activate subscription directly on users table
+    await tx`
+      UPDATE public.users
+         SET current_plan_status = 'active',
+             current_period_end  = now() + interval '30 days',
+             grace_period_end    = NULL,
+             updated_at          = now()
+       WHERE id = ${params.userId}
+    `;
+
+    // Mark payment as paid
+    await tx`
+      UPDATE public.payments
+         SET status   = 'paid',
+             paid_at  = now()
+       WHERE provider             = ${params.provider}
+         AND provider_invoice_id  = ${params.invoiceId}
+    `;
+  });
 }
 
 /**

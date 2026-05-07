@@ -7,7 +7,7 @@ const API = (process.env['NEXT_PUBLIC_API_URL'] ?? 'https://aqsha-ai-bot-api.onr
 const TOKEN_KEY = 'aqsha_mini_token';
 const TOKEN_EXP_KEY = 'aqsha_mini_token_exp';
 
-export type MiniPhase = 'loading' | 'not_registered' | 'shell' | 'error';
+export type MiniPhase = 'loading' | 'not_registered' | 'paywall' | 'shell' | 'error';
 export type MiniTab = 'dashboard' | 'transactions' | 'analytics' | 'profile';
 
 export interface BalanceSummary {
@@ -164,6 +164,13 @@ export function useMiniApp() {
         return;
       }
 
+      if (json.state === 'paywall') {
+        setFirstName(json.first_name ?? tg.initDataUnsafe?.user?.first_name ?? '');
+        setPlanStatus(json.plan_status ?? '');
+        setPhase('paywall');
+        return;
+      }
+
       if (json.mini_token && json.expires_at) {
         storeToken(json.mini_token, json.expires_at);
       }
@@ -184,6 +191,15 @@ export function useMiniApp() {
       const res = await fetch(`${API}/telegram/mini/data`, {
         headers: miniHeaders(),
       });
+      if (res.status === 402) {
+        // Subscription required — back to paywall
+        const json = await res.json().catch(() => ({})) as { plan_status?: string };
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(TOKEN_EXP_KEY);
+        if (json.plan_status) setPlanStatus(json.plan_status);
+        setPhase('paywall');
+        return;
+      }
       if (res.status === 401) {
         localStorage.removeItem(TOKEN_KEY);
         localStorage.removeItem(TOKEN_EXP_KEY);

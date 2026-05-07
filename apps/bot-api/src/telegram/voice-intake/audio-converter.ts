@@ -2,17 +2,49 @@ import { spawn } from 'child_process';
 import type { FastifyBaseLogger } from 'fastify';
 
 /**
+ * Caps the number of concurrent ffmpeg processes per bot-api instance.
+ * Each ffmpeg run buffers the input + output and keeps a child process —
+ * a burst of voice messages would otherwise exhaust Render's memory budget.
+ * The wait queue is unbounded but grows only briefly under spikes.
+ */
+const FFMPEG_MAX_CONCURRENT = 3;
+let ffmpegInFlight = 0;
+const ffmpegWaitQueue: Array<() => void> = [];
+
+async function acquireFfmpegSlot(): Promise<void> {
+  if (ffmpegInFlight < FFMPEG_MAX_CONCURRENT) {
+    ffmpegInFlight++;
+    return;
+  }
+  await new Promise<void>((resolve) => ffmpegWaitQueue.push(resolve));
+  ffmpegInFlight++;
+}
+
+function releaseFfmpegSlot(): void {
+  ffmpegInFlight--;
+  const next = ffmpegWaitQueue.shift();
+  if (next) next();
+}
+
+/**
  * Converts an audio buffer (OGG/Opus or any ffmpeg-supported format) to MP3
  * using ffmpeg via stdin→stdout pipe. No temporary files are written.
  *
  * Returns null on any error (spawn failure, ffmpeg non-zero exit, etc).
+ *
+ * Concurrency is capped via an in-process semaphore — see FFMPEG_MAX_CONCURRENT.
  */
 export async function convertToMp3(
   inputBuffer: Buffer,
   ffmpegPath: string,
   logger: FastifyBaseLogger,
 ): Promise<Buffer | null> {
+  await acquireFfmpegSlot();
   return new Promise((resolve) => {
+    const finish = (result: Buffer | null): void => {
+      releaseFfmpegSlot();
+      resolve(result);
+    };
     let proc: ReturnType<typeof spawn>;
     try {
       proc = spawn(ffmpegPath, [
@@ -25,7 +57,7 @@ export async function convertToMp3(
       ], { stdio: ['pipe', 'pipe', 'pipe'] });
     } catch (err) {
       logger.error({ err }, 'ffmpeg spawn error');
-      resolve(null);
+      finish(null);
       return;
     }
 
@@ -37,17 +69,17 @@ export async function convertToMp3(
 
     proc.on('error', (err) => {
       logger.error({ err }, 'ffmpeg process error');
-      resolve(null);
+      finish(null);
     });
 
     proc.on('close', (code) => {
       if (code !== 0) {
         const stderr = Buffer.concat(errChunks).toString('utf8').slice(0, 500);
         logger.error({ code, stderr }, 'ffmpeg exited with non-zero code');
-        resolve(null);
+        finish(null);
         return;
       }
-      resolve(Buffer.concat(chunks));
+      finish(Buffer.concat(chunks));
     });
 
     // Write input and close stdin to signal EOF

@@ -13,6 +13,7 @@
   "dependencies": {
     "@aqsha-ai/config": "workspace:*",
     "@aqsha-ai/database": "workspace:*",
+    "@aqsha-ai/shared": "workspace:*",
     "fastify": "^5.0.0"
   },
   "devDependencies": {

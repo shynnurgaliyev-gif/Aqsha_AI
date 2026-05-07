@@ -29,7 +29,7 @@ export interface VerifiedInitData {
 export function verifyTelegramInitData(
   initData: string,
   botToken: string,
-  maxAgeSeconds = 86400, // 24 hours
+  maxAgeSeconds = 3600, // 1 hour — Telegram's recommended replay window
 ): VerifiedInitData | null {
   try {
     const params = new URLSearchParams(initData);

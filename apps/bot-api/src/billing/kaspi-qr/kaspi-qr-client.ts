@@ -63,6 +63,7 @@ export class KaspiQrClient {
         description: params.description,
         external_order_id: params.externalOrderId,
       }),
+      signal: AbortSignal.timeout(15_000),
     });
 
     if (!res.ok) {
@@ -76,6 +77,7 @@ export class KaspiQrClient {
   async getInvoice(invoiceId: string): Promise<ApiPayInvoiceResponse> {
     const res = await fetch(`${this.baseUrl}/invoices/${invoiceId}`, {
       headers: this.headers(),
+      signal: AbortSignal.timeout(10_000),
     });
 
     if (!res.ok) {

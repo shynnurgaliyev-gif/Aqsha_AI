@@ -2,15 +2,24 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { AppEnv } from '@aqsha-ai/config';
 import type { DbPool } from '@aqsha-ai/database';
 import { verifyTelegramInitData } from './mini-auth';
-import { createMiniSession, getMiniSessionUserId } from './mini-session';
+import { createMiniSession, getMiniSessionContext } from './mini-session';
 import { queryBalance, queryPeriodTotal, queryCategoryBreakdownByPeriod, queryRecentTransactions } from '../analytics/analytics-repository';
 import { getUserTimezone } from '../analytics/analytics-repository';
 import { resolvePeriodRange, type DateRange } from '../analytics/period-resolver';
 import { listRecurringExpenses } from '../recurring/recurring-repository';
 import { listGoals } from '../goals/goal-repository';
 import { getCurrentSubscriptionInfo } from '../../billing/billing-repository';
+import { checkSubscriptionAccess } from '../access-control';
 
-/** Helper: extract X-Mini-Auth token and resolve userId or return 401 */
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Extracts X-Mini-Auth token and resolves userId, also enforcing the
+ * subscription access gate. Returns null and sends 401/402 on failure.
+ *
+ * 401 — token missing/expired/invalid (client should re-auth).
+ * 402 — token valid but user's plan is blocked/expired/canceled.
+ */
 async function requireMiniAuth(
   db: DbPool,
   req: FastifyRequest,
@@ -18,12 +27,21 @@ async function requireMiniAuth(
 ): Promise<string | null> {
   const raw = req.headers['x-mini-auth'];
   const token = (Array.isArray(raw) ? raw[0] : raw) ?? '';
-  const userId = await getMiniSessionUserId(db, token);
-  if (!userId) {
+  const ctx = await getMiniSessionContext(db, token);
+  if (!ctx) {
     await reply.status(401).send({ ok: false, error: 'Unauthorized' });
     return null;
   }
-  return userId;
+  if (checkSubscriptionAccess(ctx.currentPlanStatus) === 'blocked') {
+    await reply.status(402).send({
+      ok: false,
+      error: 'Subscription required',
+      state: 'paywall',
+      plan_status: ctx.currentPlanStatus,
+    });
+    return null;
+  }
+  return ctx.userId;
 }
 
 export function createMiniAppRoute(env: AppEnv, db: DbPool) {
@@ -67,6 +85,18 @@ export function createMiniAppRoute(env: AppEnv, db: DbPool) {
         }
 
         const user = rows[0];
+
+        // Paywall gate: do not issue a mini-session token for blocked plans.
+        // Mini App reads transactions and analytics — paid-only data.
+        if (checkSubscriptionAccess(user.current_plan_status) === 'blocked') {
+          return reply.send({
+            ok: true,
+            state: 'paywall',
+            plan_status: user.current_plan_status,
+            first_name: user.first_name ?? verified.user.first_name,
+          });
+        }
+
         const token = await createMiniSession(db, user.id);
         const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
@@ -157,6 +187,10 @@ export function createMiniAppRoute(env: AppEnv, db: DbPool) {
 
       const from = req.query.from ?? monthRange.gte;
       const to   = req.query.to   ?? new Date().toISOString().slice(0, 10);
+
+      if (!DATE_PATTERN.test(from) || !DATE_PATTERN.test(to)) {
+        return reply.status(400).send({ ok: false, error: 'Invalid date format, use YYYY-MM-DD' });
+      }
 
       const rows = await db<{
         id: string;

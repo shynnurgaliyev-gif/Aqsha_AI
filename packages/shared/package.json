@@ -12,6 +12,7 @@
     "test": "echo shared test is not configured yet"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
     "typescript": "^5.4.5"
   }
 }

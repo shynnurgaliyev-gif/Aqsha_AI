@@ -28,7 +28,15 @@ export function createBillingWebhookRoute(env: AppEnv, db: DbPool) {
 
           // ── Signature verification ────────────────────────────────────────
           const signature = (req.headers['x-webhook-signature'] as string) ?? '';
-          const rawBody   = (req as any).rawBody as string ?? JSON.stringify(req.body);
+          const rawBody   = (req as unknown as { rawBody?: string }).rawBody;
+
+          // Fail-closed: re-serialising req.body would change byte order and
+          // whitespace, breaking HMAC verification. If rawBody is missing the
+          // contentTypeParser in app.ts did not run — refuse to verify.
+          if (typeof rawBody !== 'string' || rawBody.length === 0) {
+            logger.error('Billing webhook: rawBody missing — rejecting (server misconfiguration)');
+            return reply.status(500).send({ error: 'server misconfiguration' });
+          }
 
           if (!provider.verifyWebhook(rawBody, signature)) {
             logger.warn({ signature }, 'Billing webhook: invalid signature — rejected');

@@ -76,11 +76,24 @@ export function createWebhookRoute(env: AppEnv, db: DbPool): FastifyPluginAsync 
       // ── 5. Dispatch ──────────────────────────────────────────────────────────
       try {
         await handleTelegramUpdate(update, updateType, db, env, app.log);
-        await markReceiptProcessed(db, update.update_id);
+        try {
+          await markReceiptProcessed(db, update.update_id);
+        } catch (markErr) {
+          // Receipt status is best-effort bookkeeping. The update itself was
+          // processed successfully; we still must return 200 to Telegram.
+          app.log.warn({ markErr, updateId: update.update_id }, 'Failed to mark receipt processed');
+        }
       } catch (err) {
         app.log.error({ err, updateId: update.update_id }, 'Unhandled error processing Telegram update');
-        await markReceiptFailed(db, update.update_id, String(err));
-        // Return 200: error is recorded; Telegram retrying won't help
+        try {
+          await markReceiptFailed(db, update.update_id, String(err));
+        } catch (markErr) {
+          // If both processing and the failure-mark itself fail, we still
+          // return 200 — the receipt row already exists with status='received'
+          // so Telegram dedup will not reprocess on retry.
+          app.log.warn({ markErr, updateId: update.update_id }, 'Failed to mark receipt failed');
+        }
+        // Return 200: error is recorded (or at least logged); Telegram retrying won't help
       }
 
       return { ok: true };

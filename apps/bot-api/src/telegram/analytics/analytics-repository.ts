@@ -53,32 +53,6 @@ export async function queryBalance(db: DbPool, userId: string): Promise<BalanceS
 }
 
 /**
- * Total for the given kind in the current calendar month.
- * Uses transaction_date_local for month scoping (user's local date).
- *
- * Note: this function still uses SQL current_date and is kept for reference.
- * New code should use queryPeriodTotal with an explicit DateRange resolved
- * from the user's timezone via resolvePeriodRange.
- */
-export async function queryMonthTotal(
-  db: DbPool,
-  userId: string,
-  kind: 'expense' | 'income',
-): Promise<number> {
-  const rows = await db<{ total: string }[]>`
-    SELECT COALESCE(SUM(amount), 0) AS total
-    FROM public.transactions
-    WHERE user_id = ${userId}
-      AND kind = ${kind}
-      AND is_deleted = false
-      AND parse_status = 'confirmed'
-      AND transaction_date_local >= date_trunc('month', current_date)::date
-      AND transaction_date_local < (date_trunc('month', current_date) + interval '1 month')::date
-  `;
-  return Number(rows[0]?.total ?? 0);
-}
-
-/**
  * Total for the given kind within an explicit date range.
  *
  * The range must be resolved in TypeScript via resolvePeriodRange before
@@ -146,39 +120,6 @@ export async function queryCategoryScopedTotal(
     count: Number(row.count),
     categoryName: row.category_name,
   };
-}
-
-/**
- * Per-category totals for the given kind in the current calendar month.
- * Sorted by total descending, capped at 10 rows.
- *
- * Note: this function still uses SQL current_date and is kept for reference.
- * New code should use queryCategoryBreakdownByPeriod with an explicit DateRange.
- */
-export async function queryCategoryBreakdown(
-  db: DbPool,
-  userId: string,
-  kind: 'expense' | 'income',
-): Promise<CategoryTotalRow[]> {
-  const rows = await db<{ category_name: string; total: string; count: string }[]>`
-    SELECT c.name AS category_name, SUM(t.amount) AS total, COUNT(*) AS count
-    FROM public.transactions t
-    JOIN public.categories c ON c.id = t.category_id
-    WHERE t.user_id = ${userId}
-      AND t.kind = ${kind}
-      AND t.is_deleted = false
-      AND t.parse_status = 'confirmed'
-      AND t.transaction_date_local >= date_trunc('month', current_date)::date
-      AND t.transaction_date_local < (date_trunc('month', current_date) + interval '1 month')::date
-    GROUP BY c.id, c.name
-    ORDER BY total DESC
-    LIMIT 10
-  `;
-  return rows.map((r) => ({
-    categoryName: r.category_name,
-    total: Number(r.total),
-    count: Number(r.count),
-  }));
 }
 
 /**

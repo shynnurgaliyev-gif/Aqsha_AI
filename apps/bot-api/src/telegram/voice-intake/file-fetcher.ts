@@ -13,7 +13,7 @@ export async function getFilePath(
 
   let response: Response;
   try {
-    response = await fetch(url);
+    response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
   } catch (err) {
     logger.error({ err, fileId }, 'Telegram getFile network error');
     return null;
@@ -53,7 +53,7 @@ export async function downloadVoiceFile(
 
   let response: Response;
   try {
-    response = await fetch(url);
+    response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
   } catch (err) {
     logger.error({ err, filePath }, 'Telegram file download network error');
     return null;

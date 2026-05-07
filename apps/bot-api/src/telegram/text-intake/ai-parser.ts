@@ -1,4 +1,5 @@
 import type { FastifyBaseLogger } from 'fastify';
+import { fetchWithRetry } from '@aqsha-ai/shared';
 import type { ParsedIntake } from './parser';
 
 /**
@@ -146,14 +147,22 @@ export async function parseWithAi(
 
   let response: Response;
   try {
-    response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
+    response = await fetchWithRetry(
+      'https://api.openai.com/v1/chat/completions',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(requestBody),
       },
-      body: JSON.stringify(requestBody),
-    });
+      {
+        timeoutMs: 15_000,
+        retries: 2,
+        onRetry: (info) => logger.warn(info, 'AI parser retry'),
+      },
+    );
   } catch (err) {
     logger.error({ err }, 'AI parser: network error');
     return null;

@@ -14,4 +14,6 @@ export type IntakeResult =
   | { kind: 'bulk_saved'; message: string; items: BulkDraftItem[] }
   | { kind: 'cancelled'; message: string }
   | { kind: 'category_not_found'; message: string; candidate: string }
-  | { kind: 'unsupported'; message: string };
+  | { kind: 'unsupported'; message: string }
+  /** Input rejected before any LLM call — hard policy violation, no chat fallback. */
+  | { kind: 'rejected'; message: string };
