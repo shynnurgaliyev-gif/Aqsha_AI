@@ -49,9 +49,10 @@ const baseSchema = z.object({
   // active / grace / pending users are unlimited.
   TRIAL_VOICE_DAILY_LIMIT: z.coerce.number().int().positive().default(10),
   // Duration ceiling per voice message (seconds). Hard cap on Whisper cost
-  // per call. Trial = 1.5 min, paid = 15 min.
+  // per call. Both tiers capped at 1.5 min — paid users still benefit from
+  // unlimited daily count (trial is capped via TRIAL_VOICE_DAILY_LIMIT).
   TRIAL_VOICE_MAX_DURATION_SEC: z.coerce.number().int().positive().default(90),
-  PAID_VOICE_MAX_DURATION_SEC: z.coerce.number().int().positive().default(900),
+  PAID_VOICE_MAX_DURATION_SEC: z.coerce.number().int().positive().default(90),
 
   // ── Worker / Jobs ────────────────────────────────────────────────────────
   JOB_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(5000),
