@@ -13,14 +13,11 @@ import {
   handleBillingUsePhone,
   handleBillingChangePhone,
 } from '../billing/billing-service';
-import { handleBudgetCommand } from './budgets/budget-handler';
-import { matchExportCommand, parseExportCallback, EXPORT_PERIOD_KEYBOARD } from './export/export-matcher';
+import { parseExportCallback } from './export/export-matcher';
 import { handleExportRequest } from './export/export-handler';
 import { sendDocument } from './telegram-client';
-import { handleGoalCommand } from './goals/goal-handler';
-import { handleCorrectionFlow, handleBulkDeleteCallback, handleDeleteCallback, handleCorrectionCallback } from './transaction-correction/correction-handler';
-import { handleRecurringCommand, handleRecurringTimeCallback, handleRecurringRecordCallback, handleRecurringDeleteCallback } from './recurring/recurring-handler';
-import { handleResetFlow } from './reset/reset-handler';
+import { handleBulkDeleteCallback, handleDeleteCallback, handleCorrectionCallback } from './transaction-correction/correction-handler';
+import { handleRecurringTimeCallback, handleRecurringRecordCallback, handleRecurringDeleteCallback } from './recurring/recurring-handler';
 import { handleTextMessage, CONFIRMATION_KEYBOARD } from './text-intake/handler';
 import { getVoiceTranscript } from './voice-intake/handler';
 import {
@@ -29,7 +26,6 @@ import {
   getVoiceDurationLimit,
   formatVoiceTooLongMessage,
 } from './voice-intake/quota';
-import { handleAnalyticsQuery } from './analytics/handler';
 import { handleChat } from './chat/chat-handler';
 import { getChatHistory, setChatHistory } from './chat/chat-session';
 import { sendMessage, answerCallbackQuery } from './telegram-client';
@@ -37,7 +33,9 @@ import { getPendingDraft, clearPendingDraft, getPendingBulkDraft, clearPendingBu
 import { insertConfirmedTransaction, insertConfirmedBulkTransactions } from './text-intake/transaction-inserter';
 import { getBudgetStatus } from './budgets/budget-repository';
 import { formatBudgetAlert } from './budgets/budget-formatter';
-import { matchHelpCommand, ONBOARDING_MESSAGE, HELP_MESSAGE, miniAppKeyboard } from './help/help-formatter';
+import { ONBOARDING_MESSAGE, miniAppKeyboard } from './help/help-formatter';
+import { runTextHandlers } from './dispatch/dispatcher';
+import { TEXT_HANDLERS } from './dispatch/text-handlers';
 
 /**
  * Attempts to handle billing-phone input for the user. Returns true if the
@@ -72,6 +70,12 @@ async function tryHandleBillingPhone(
 /**
  * Full routing pipeline for any text (typed or voice-transcribed).
  * Called after /start, billing command, and access gate checks.
+ *
+ * Walks the TEXT_HANDLERS registry first; falls through to text-intake
+ * (transaction parsing + chat fallback) only when no handler claimed the
+ * message. The text-intake fallback is inline because its result-handling
+ * involves multi-message flows (budget alerts) that don't fit the simple
+ * HandlerOutput shape.
  */
 async function dispatchText(
   text: string,
@@ -82,118 +86,13 @@ async function dispatchText(
   env: AppEnv,
   logger: FastifyBaseLogger,
 ): Promise<void> {
-  // ── Billing phone input interception ────────────────────────────────────────
-  if (await tryHandleBillingPhone(text, chatId, userId, db, env, logger)) {
-    logger.info({ userId }, 'Billing phone input handled');
-    return;
-  }
+  const handled = await runTextHandlers(
+    { text, msg, chatId, userId, db, env, logger },
+    TEXT_HANDLERS,
+  );
+  if (handled) return;
 
-  // ── Export command ───────────────────────────────────────────────────────────
-  if (matchExportCommand(text)) {
-    await sendMessage(env.TELEGRAM_BOT_TOKEN, {
-      chatId,
-      text: '📂 За какой период выгрузить историю?',
-      reply_markup: EXPORT_PERIOD_KEYBOARD,
-    }, logger);
-    return;
-  }
-
-  // ── Help command ─────────────────────────────────────────────────────────────
-  if (matchHelpCommand(text)) {
-    await sendMessage(env.TELEGRAM_BOT_TOKEN, {
-      chatId,
-      text: HELP_MESSAGE,
-      ...(env.TELEGRAM_MINIAPP_URL ? { reply_markup: miniAppKeyboard(env.TELEGRAM_MINIAPP_URL) } : {}),
-    }, logger);
-    return;
-  }
-
-  // ── Budget commands ──────────────────────────────────────────────────────────
-  let budgetResponse: string | null = null;
-  try {
-    budgetResponse = await handleBudgetCommand(text, userId, db, logger);
-  } catch (err) {
-    logger.error({ err, userId }, 'Budget command error');
-    await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: 'Не удалось выполнить команду. Попробуйте позже.' }, logger);
-    return;
-  }
-  if (budgetResponse !== null) {
-    logger.info({ userId }, 'Budget command handled');
-    await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: budgetResponse }, logger);
-    return;
-  }
-
-  // ── Goal commands ────────────────────────────────────────────────────────────
-  let goalResponse: string | null = null;
-  try {
-    goalResponse = await handleGoalCommand(text, userId, db, logger);
-  } catch (err) {
-    logger.error({ err, userId }, 'Goal command error');
-    await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: 'Не удалось выполнить команду. Попробуйте позже.' }, logger);
-    return;
-  }
-  if (goalResponse !== null) {
-    logger.info({ userId }, 'Goal command handled');
-    await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: goalResponse }, logger);
-    return;
-  }
-
-  // ── Recurring expenses ───────────────────────────────────────────────────────
-  let recurringResponse: Awaited<ReturnType<typeof handleRecurringCommand>>;
-  try {
-    recurringResponse = await handleRecurringCommand(text, userId, db, logger);
-  } catch (err) {
-    logger.error({ err, userId }, 'Recurring command error');
-    await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: 'Не удалось выполнить команду. Попробуйте позже.' }, logger);
-    return;
-  }
-  if (recurringResponse !== null) {
-    logger.info({ userId }, 'Recurring command handled');
-    if (typeof recurringResponse === 'string') {
-      await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: recurringResponse }, logger);
-    } else {
-      await sendMessage(env.TELEGRAM_BOT_TOKEN, {
-        chatId,
-        text: recurringResponse.message,
-        reply_markup: recurringResponse.reply_markup,
-      }, logger);
-    }
-    return;
-  }
-
-  // ── Analytics ────────────────────────────────────────────────────────────────
-  const analyticsResponse = await handleAnalyticsQuery(text, userId, db, env, logger);
-  if (analyticsResponse !== null) {
-    logger.info({ userId }, 'Analytics query handled');
-    await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: analyticsResponse }, logger);
-    return;
-  }
-
-  // ── Reset flow ───────────────────────────────────────────────────────────────
-  const resetResponse = await handleResetFlow(text, userId, db, logger);
-  if (resetResponse !== null) {
-    logger.info({ userId }, 'Reset flow handled');
-    await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: resetResponse }, logger);
-    return;
-  }
-
-  // ── Correction flow ──────────────────────────────────────────────────────────
-  const correctionResponse = await handleCorrectionFlow(text, userId, db, logger);
-  if (correctionResponse !== null) {
-    logger.info({ userId }, 'Correction flow handled');
-    if (typeof correctionResponse === 'string') {
-      await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: correctionResponse }, logger);
-    } else {
-      await sendMessage(env.TELEGRAM_BOT_TOKEN, {
-        chatId,
-        text: correctionResponse.message,
-        reply_markup: correctionResponse.reply_markup,
-      }, logger);
-    }
-    return;
-  }
-
-  // ── Text / bulk intake ───────────────────────────────────────────────────────
+  // ── Text / bulk intake (fallback) ────────────────────────────────────────────
   const result = await handleTextMessage(msg, userId, db, env, logger);
   logger.info({ userId, resultKind: result.kind }, 'Text message handled');
 

@@ -223,7 +223,7 @@ supabase/migrations/          (13 миграций; см. ниже)
 - 🟢 `apps/admin-web/src/middleware.ts:10-27` — ручной base64-декодер для Edge runtime. `atob` доступен в Edge с 2022 — лишний код, заменимо на `atob(encoded)`.
 
 ### 4. Архитектура
-- 🟡 `apps/bot-api/src/telegram/update-router.ts:225-503` — 280-строчный switch-god-function: парсинг + диспетчеризация + форматирование + отправка + DB-writes в одном месте. Каждая новая фича = ручная вставка в правильное место. Фикс: реестр `Handler = { match, handle }` + общий `dispatch(text → handlers)` с явными приоритетами.
+- ✅ ~~🟡 update-router god-switch для текста~~ — реестр `TextHandler[]` в `dispatch/text-handlers.ts` + `runTextHandlers` в `dispatch/dispatcher.ts`. `dispatchText` теперь 10 строк (registry-walk + text-intake fallback). Добавление новой фичи = одна запись в `TEXT_HANDLERS`. callback_query-флоу пока остаётся switch-style (отдельная задача).
 - ✅ ~~🟡 update-router billing-phone duplicate~~ — извлечён helper `tryHandleBillingPhone(text, chatId, userId, db, env, logger): Promise<boolean>`. Оба места (pre-gate в `case 'message'` и post-gate в `dispatchText`) теперь используют его. Структурно дубликата больше нет; обе точки нужны намеренно (гейт expired-юзеров vs voice-транскрипты).
 - 🟡 `apps/bot-api/src/telegram/voice-intake/handler.ts` — `getVoiceTranscript` (актуальная) и `handleVoiceMessage` (мёртвая) — дублированный пайплайн.
 - 🟡 `apps/bot-api/src/telegram/mini-app/mini-route.ts:202-244` — арифметика месяца (`new Date(year, mon, 1)`) дублирует логику `analytics/period-resolver.ts`. Фикс: расширить `period-resolver` на произвольный `YYYY-MM`.
@@ -333,13 +333,22 @@ supabase/migrations/          (13 миграций; см. ниже)
 - ✅ **update-router billing-phone DRY** — helper `tryHandleBillingPhone`, оба call-site используют его.
 - ✅ **Тестов**: +4 в `quota-format.test.ts` для граничных значений (boundary 60s, 59s, 150s).
 
+**Седьмая итерация:**
+- ✅ **A1 (text dispatcher)** — реестр `TextHandler[]` для текстовых сообщений:
+  - `dispatch/types.ts`: `TextHandler`, `HandlerOutput` (`pass | sent | reply`), `TextDispatchContext`.
+  - `dispatch/text-handlers.ts`: 9 хэндлеров (billing-phone, export, help, budget, goal, recurring, analytics, reset, correction) — тонкие обёртки вокруг существующих функций; `stringHandler` фабрика для `string | null` сигнатур; единый error-path → дружелюбный fallback-текст.
+  - `dispatch/dispatcher.ts`: `dispatchTextMessage(ctx, handlers)` (тестируемая чистая функция) + `runTextHandlers(ctx, handlers)` (sender wrapper).
+  - `update-router.ts:dispatchText` теперь ~10 строк (раньше ~140): прогон по реестру → text-intake fallback с budget-alert логикой остаётся inline (его побочки сложнее, чем влезает в `HandlerOutput`).
+  - Добавление новой фичи (например, групповая команда для семейных аккаунтов) = одна запись в `TEXT_HANDLERS`.
+  - +6 тестов в `dispatch/dispatcher.test.ts`: order, short-circuit, exception propagation, reply pass-through.
+
 `pnpm typecheck` ✓, `pnpm build` ✓.
 
 **Что осталось (impact / effort):**
 
-1. **🟡 A1** — реестр хэндлеров вместо god-switch в `update-router.ts`. ~3 часа. Снимает блокер на семейные аккаунты. Теперь делать БЕЗОПАСНО: тесты на парсеры/гейты ловят регрессии.
+1. **🟡 A1.5 (callback dispatcher)** — реестр для callback_query (сейчас всё ещё switch со многими ветками `confirm`/`del_yes`/`rec_*`/etc). ~2 часа. Доразвитие седьмой итерации.
 2. **🟡 Расширить тесты на DB-функции** — `tryConsumeVoiceQuota`, `activateSubscription` rollback (нужна testcontainers Postgres или Supabase test branch). ~3 часа.
-3. **🟢 mini-sessions cleanup** — воркер-таск на удаление просроченных `mini_sessions`. ~30 минут.
+3. **🟡 Rate limiting** — `@fastify/rate-limit` на `/telegram/webhook`, `/telegram/mini/*`, `/webhooks/billing`. ~1 час.
 4. **🟢 RN1** — Dockerfile + render.yaml entry для admin-web. ~2 часа.
 
 **Деплой-чеклист (после ревью):**
