@@ -15,7 +15,10 @@ export async function ensureTrialSubscription(
   userId: string,
   trialDays: number,
 ): Promise<void> {
-  await db`
+  // Insert returns RETURNING only when a new row was actually created (no
+  // conflict). For existing users this is a no-op and we skip the follow-up
+  // UPDATE entirely — saving a round-trip on every inbound message.
+  const inserted = await db<Array<{ id: string }>>`
     INSERT INTO subscriptions (
       user_id,
       status,
@@ -31,10 +34,13 @@ export async function ensureTrialSubscription(
       now() + make_interval(days => ${trialDays})
     )
     ON CONFLICT DO NOTHING
+    RETURNING id
   `;
 
-  // Keep users.current_period_end in sync with the trial end date.
-  // The DB trigger syncs current_plan_status but not current_period_end.
+  if (inserted.length === 0) return;
+
+  // Newly-created trial — sync users.current_period_end (the DB trigger
+  // updates current_plan_status but not the period end).
   await db`
     UPDATE public.users
        SET current_period_end = now() + make_interval(days => ${trialDays})

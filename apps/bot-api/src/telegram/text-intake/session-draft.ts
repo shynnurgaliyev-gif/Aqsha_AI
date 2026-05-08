@@ -14,6 +14,45 @@ export interface PendingTransactionDraft {
 }
 
 /**
+ * Extracts `pendingTransaction` from a context_json blob, returning null
+ * if absent or malformed. Pure helper — no DB access.
+ */
+function pickSingleDraft(context: Record<string, unknown>): PendingTransactionDraft | null {
+  const draft = context['pendingTransaction'];
+  if (!draft || typeof draft !== 'object' || Array.isArray(draft)) return null;
+  return draft as PendingTransactionDraft;
+}
+
+/**
+ * Extracts `pendingBulkTransaction` from a context_json blob.
+ */
+function pickBulkDraft(context: Record<string, unknown>): PendingBulkDraft | null {
+  const draft = context['pendingBulkTransaction'];
+  if (!draft || typeof draft !== 'object' || Array.isArray(draft)) return null;
+  return draft as PendingBulkDraft;
+}
+
+/**
+ * Reads both pending drafts (single + bulk) in a single SQL round-trip.
+ * Use this in hot paths (text/voice intake) instead of calling
+ * getPendingDraft + getPendingBulkDraft separately.
+ */
+export async function getPendingDrafts(
+  db: DbPool,
+  userId: string,
+): Promise<{ single: PendingTransactionDraft | null; bulk: PendingBulkDraft | null }> {
+  const result = await db<Array<{ context_json: Record<string, unknown> }>>`
+    SELECT context_json FROM user_sessions WHERE user_id = ${userId}
+  `;
+  const row = result[0];
+  if (!row) return { single: null, bulk: null };
+  return {
+    single: pickSingleDraft(row.context_json),
+    bulk: pickBulkDraft(row.context_json),
+  };
+}
+
+/**
  * Reads the pending transaction draft from the session context.
  * Returns null if no session row exists or no draft is present.
  */
@@ -26,11 +65,7 @@ export async function getPendingDraft(
   `;
   const row = result[0];
   if (!row) return null;
-
-  const draft = row.context_json['pendingTransaction'];
-  if (!draft || typeof draft !== 'object' || Array.isArray(draft)) return null;
-
-  return draft as PendingTransactionDraft;
+  return pickSingleDraft(row.context_json);
 }
 
 /**
@@ -99,11 +134,7 @@ export async function getPendingBulkDraft(
   `;
   const row = result[0];
   if (!row) return null;
-
-  const draft = row.context_json['pendingBulkTransaction'];
-  if (!draft || typeof draft !== 'object' || Array.isArray(draft)) return null;
-
-  return draft as PendingBulkDraft;
+  return pickBulkDraft(row.context_json);
 }
 
 export async function setPendingBulkDraft(

@@ -40,6 +40,36 @@ import { formatBudgetAlert } from './budgets/budget-formatter';
 import { matchHelpCommand, ONBOARDING_MESSAGE, HELP_MESSAGE, miniAppKeyboard } from './help/help-formatter';
 
 /**
+ * Attempts to handle billing-phone input for the user. Returns true if the
+ * input was consumed (and a reply sent), false otherwise.
+ *
+ * Used in two places intentionally:
+ *   - `case 'message'` BEFORE the access gate, so expired users can enter
+ *     their phone to pay (security-driven pre-gate path);
+ *   - inside `dispatchText` for voice transcripts, which arrive after the
+ *     access gate but still need the same parser.
+ *
+ * Centralising the duplicated send logic avoids drift between the two paths.
+ */
+async function tryHandleBillingPhone(
+  text: string,
+  chatId: number,
+  userId: string,
+  db: DbPool,
+  env: AppEnv,
+  logger: FastifyBaseLogger,
+): Promise<boolean> {
+  const response = await handleBillingPhoneInput(text, userId, db, env, logger);
+  if (response === null) return false;
+  await sendMessage(env.TELEGRAM_BOT_TOKEN, {
+    chatId,
+    text: response.text,
+    ...(response.reply_markup ? { reply_markup: response.reply_markup } : {}),
+  }, logger);
+  return true;
+}
+
+/**
  * Full routing pipeline for any text (typed or voice-transcribed).
  * Called after /start, billing command, and access gate checks.
  */
@@ -53,14 +83,8 @@ async function dispatchText(
   logger: FastifyBaseLogger,
 ): Promise<void> {
   // ── Billing phone input interception ────────────────────────────────────────
-  const billingPhoneResponse = await handleBillingPhoneInput(text, userId, db, env, logger);
-  if (billingPhoneResponse !== null) {
+  if (await tryHandleBillingPhone(text, chatId, userId, db, env, logger)) {
     logger.info({ userId }, 'Billing phone input handled');
-    await sendMessage(env.TELEGRAM_BOT_TOKEN, {
-      chatId,
-      text: billingPhoneResponse.text,
-      ...(billingPhoneResponse.reply_markup ? { reply_markup: billingPhoneResponse.reply_markup } : {}),
-    }, logger);
     return;
   }
 
@@ -268,14 +292,8 @@ export async function routeTelegramUpdate(
 
         // ── Billing phone input — accessible even when blocked ─────────────────
         // Expired users must be able to enter/confirm their phone to pay.
-        const billingPhoneResponse = await handleBillingPhoneInput(msg.text ?? '', userId, db, env, logger);
-        if (billingPhoneResponse !== null) {
+        if (await tryHandleBillingPhone(msg.text ?? '', msg.chat.id, userId, db, env, logger)) {
           logger.info({ userId }, 'Billing phone input handled (pre-gate)');
-          await sendMessage(env.TELEGRAM_BOT_TOKEN, {
-            chatId: msg.chat.id,
-            text: billingPhoneResponse.text,
-            ...(billingPhoneResponse.reply_markup ? { reply_markup: billingPhoneResponse.reply_markup } : {}),
-          }, logger);
           break;
         }
 

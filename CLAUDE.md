@@ -199,7 +199,7 @@ supabase/migrations/          (13 миграций; см. ниже)
 
 ### 1. Производительность
 - 🟡 `apps/bot-api/src/telegram/update-router.ts:40-211` — `dispatchText` последовательно опрашивает ~10 матчеров (billing-phone → export → help → budgets → goals → recurring → analytics → reset → correction → text-intake), у каждого может быть DB-запрос или OpenAI-fetch. Латентность хэндлера = сумма всех. Фикс: реестр `{matcher, handler}` с быстрой prefilter-ступенью (regex-токены) и параллельный keyword-классификатор.
-- 🟡 `apps/bot-api/src/telegram/text-intake/session-draft.ts:24-34, 96-107` — `getPendingDraft` и `getPendingBulkDraft` делают два отдельных `SELECT context_json`. На каждое входящее сообщение — лишний round-trip. Фикс: один `SELECT context_json` + чтение обоих ключей в TS.
+- ✅ ~~🟡 session-draft два SELECT~~ — добавлен `getPendingDrafts(db, userId)` возвращающий `{single, bulk}` за один запрос. `handleTextMessage` использует его. Старые функции оставлены для совместимости с другими местами вызова.
 - 🟡 `apps/bot-api/src/telegram/voice-intake/audio-converter.ts:18-25` — ffmpeg `spawn` без ограничения параллельности; всплеск голосовых сообщений → CPU/RAM спайк, может уронить контейнер на Render. Фикс: in-process semaphore (limit=2-3) или вынести в worker job.
 - ✅ ~~🟡 нет таймаутов на fetch к OpenAI/Whisper/Telegram/Kaspi~~ — добавлен `AbortSignal.timeout` на горячий путь: Whisper 30s, OpenAI chat 15s, Telegram bot-api 10s (sendDocument 20s), Telegram worker sender 10s, Telegram getFile 10s, Telegram CDN download 30s, webhook-registration 10s, Kaspi createInvoice 15s / getInvoice 10s.
 - 🟡 `packages/database/src/pool.ts:42` — `prepare:false` обязателен для PgBouncer transaction mode, но теряется кеш prepared statements. Тенденция OK, документировать в ADR.
@@ -210,7 +210,7 @@ supabase/migrations/          (13 миграций; см. ниже)
 - ✅ ~~🟡 `voice-intake/handler.ts:85-146` — мёртвый `handleVoiceMessage`~~ — удалено.
 - ✅ ~~🟡 `webhook-route.ts:78-84` — `markReceiptFailed` мог обрушить webhook~~ — обёрнуто в свой try/catch, "always 200" гарантировано.
 - ✅ ~~🟡 нет ретраев на внешние fetch~~ — добавлен `fetchWithRetry` (`packages/shared`): 2 ретрая, exp back-off, ретраит 5xx/429/network. Подключён в Whisper, AI text-parser, AI analytics-parser, chat-handler (с tighter budget — 1 retry × 8s).
-- 🟡 `apps/bot-api/src/telegram/subscription-repository.ts:38-43` — `UPDATE users SET current_period_end = … WHERE current_period_end IS NULL` фактически срабатывает один раз, но запрос всё равно выполняется на каждое сообщение. Можно вынести в `bootstrapUser` под флаг `is_new_user` из upsert.
+- ✅ ~~🟡 subscription-repository.ts redundant UPDATE~~ — `INSERT ... RETURNING id` теперь короткозамыкает: если строка не вставлена (существующий пользователь) — UPDATE на `users.current_period_end` пропускается. Экономит round-trip на каждое сообщение существующего юзера.
 - ✅ ~~🟡 billing-webhook-route.ts rawBody fallback~~ — fail-closed: при отсутствии rawBody → 500 + лог "server misconfiguration", без `JSON.stringify` подмены.
 
 ### 3. Безопасность
@@ -224,7 +224,7 @@ supabase/migrations/          (13 миграций; см. ниже)
 
 ### 4. Архитектура
 - 🟡 `apps/bot-api/src/telegram/update-router.ts:225-503` — 280-строчный switch-god-function: парсинг + диспетчеризация + форматирование + отправка + DB-writes в одном месте. Каждая новая фича = ручная вставка в правильное место. Фикс: реестр `Handler = { match, handle }` + общий `dispatch(text → handlers)` с явными приоритетами.
-- 🟡 `update-router.ts:50-58` (внутри `dispatchText`) и `update-router.ts:265-274` (внутри `case 'message'`) — `handleBillingPhoneInput` вызывается дважды по разным путям. Фикс: один билинг-фолбэк в начале `dispatchText`, удалить дубль из switch.
+- ✅ ~~🟡 update-router billing-phone duplicate~~ — извлечён helper `tryHandleBillingPhone(text, chatId, userId, db, env, logger): Promise<boolean>`. Оба места (pre-gate в `case 'message'` и post-gate в `dispatchText`) теперь используют его. Структурно дубликата больше нет; обе точки нужны намеренно (гейт expired-юзеров vs voice-транскрипты).
 - 🟡 `apps/bot-api/src/telegram/voice-intake/handler.ts` — `getVoiceTranscript` (актуальная) и `handleVoiceMessage` (мёртвая) — дублированный пайплайн.
 - 🟡 `apps/bot-api/src/telegram/mini-app/mini-route.ts:202-244` — арифметика месяца (`new Date(year, mon, 1)`) дублирует логику `analytics/period-resolver.ts`. Фикс: расширить `period-resolver` на произвольный `YYYY-MM`.
 - 🟡 `users.current_period_end` (миграция 008) и `subscriptions.paid_until/trial_end_at` (миграция 001) хранят одно и то же. Источник правды размазан, поддерживается app-кодом (`ensureTrialSubscription`, `activateSubscription`). Дрейф уже был замечен. Фикс: выбрать один источник.
@@ -236,7 +236,7 @@ supabase/migrations/          (13 миграций; см. ниже)
 - ✅ ~~🟡 нет индекса под `transaction_at DESC`~~ — миграция `20260507_014_transactions_at_index.sql` добавляет partial index `(user_id, transaction_at desc) WHERE is_deleted = false`. Применить через DEPLOY_RUNBOOK.
 - 🟡 `payments.amount_kzt INTEGER` — OK для KZT, но если когда-нибудь пойдут USD/EUR с центами — потребуется decimal/`amount` + `currency_code` (как в transactions).
 - 🟢 `transactions` без партиционирования и архивации; растёт безгранично. Не критично, добавить в roadmap (через 100k+ строк на пользователя).
-- 🟢 `mini_sessions` — комментарий обещает "auto-clean older than 7 days", но фактическая чистка — только в момент создания нового токена для того же `user_id` (`mini-session.ts:17-21`). Чистка для неактивных пользователей не происходит. Фикс: воркер-таск раз в сутки `DELETE … WHERE expires_at < now() - interval '7 days'`.
+- ✅ ~~🟢 mini_sessions cleanup~~ — `apps/worker/src/mini-sessions/cleanup.ts`: дроссель раз в час, удаляет `expires_at < now() - 7 days`. Подключено в worker tick после `recurring-reminders` и до `processJobs`. Best-effort: ошибки логируются и не блокируют другие шедулеры.
 
 ### 6. Render-специфика
 - 🟡 admin-web Dockerfile + `render.yaml` entry отсутствуют (известно, см. PROJECT_STATE.md). Mini App и админка пока хостятся отдельно.
@@ -254,7 +254,7 @@ supabase/migrations/          (13 миграций; см. ниже)
 
 ### 8. Mini App
 - 🔴 нет проверки `current_plan_status` (см. №3.S1).
-- 🟡 `apps/admin-web/src/app/mini/hooks/useMiniApp.ts:185-194` — на 401 чистим токен и снова зовём `authenticate()`. Если бэкенд в постоянной 401 (например, бот заблокировал или сессия инвалидирована) — потенциальный hot-loop. Фикс: счётчик попыток. 402 уже разделён в отдельный paywall-флоу (после S1).
+- ✅ ~~🟡 useMiniApp.ts 401 hot-loop~~ — добавлен `useRef` счётчик `MAX_AUTH_RETRIES=2`; после 2 неудачных re-auth подряд phase=`error` с понятным сообщением, счётчик сбрасывается на любом не-401 ответе.
 - 🟡 нет CSP / `X-Frame-Options`. JSON-API сам по себе безопасен, но HTML mini-app должен иметь явные header'ы.
 - 🟢 нет offline-режима / индикации потери сети — UX-полировка.
 - 🟢 размер бандла Next.js не аудитен; `force-dynamic` рендеринг для админки — OK.
@@ -324,6 +324,14 @@ supabase/migrations/          (13 миграций; см. ниже)
 
 **Пятая итерация:**
 - ✅ **TST1** — Vitest + 111 unit-тестов на 8 файлов, покрытие критичных чистых функций (см. раздел 10 выше). Подключено в CI перед typecheck. Test runtime: ~450ms full suite. Готовый каркас для дальнейшего расширения покрытия.
+
+**Шестая итерация (мелкие wins):**
+- ✅ **session-draft single SELECT** — `getPendingDrafts` за один round-trip (вместо двух).
+- ✅ **ensureTrialSubscription dedup** — пропуск follow-up UPDATE для существующих юзеров через `RETURNING id`.
+- ✅ **mini_sessions cleanup** — почасовой воркер-таск, удаляет токены `expires_at < now() - 7 days`.
+- ✅ **useMiniApp 401-loop guard** — `MAX_AUTH_RETRIES=2`, после исчерпания phase='error'.
+- ✅ **update-router billing-phone DRY** — helper `tryHandleBillingPhone`, оба call-site используют его.
+- ✅ **Тестов**: +4 в `quota-format.test.ts` для граничных значений (boundary 60s, 59s, 150s).
 
 `pnpm typecheck` ✓, `pnpm build` ✓.
 

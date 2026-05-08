@@ -9,8 +9,8 @@ import { parseWithAi } from './ai-parser';
 import { resolveCategory, saveAliasIfNew, normalizeCandidate } from './category-resolver';
 import type { ResolvedCategory } from './category-resolver';
 import {
-  getPendingDraft, setPendingDraft, clearPendingDraft,
-  getPendingBulkDraft, setPendingBulkDraft, clearPendingBulkDraft,
+  getPendingDrafts, setPendingDraft, clearPendingDraft,
+  setPendingBulkDraft, clearPendingBulkDraft,
 } from './session-draft';
 import type { BulkDraftItem } from './session-draft';
 import { insertConfirmedTransaction } from './transaction-inserter';
@@ -116,8 +116,9 @@ export async function handleTextMessage(
   }
 
   // ── A. Pending draft path ────────────────────────────────────────────────────
-  // Check bulk draft first, then single draft.
-  const pendingBulkDraft = await getPendingBulkDraft(db, userId);
+  // Single round-trip reads both pending drafts; we then dispatch in the same
+  // priority order as before (bulk > single).
+  const { single: pendingDraft, bulk: pendingBulkDraft } = await getPendingDrafts(db, userId);
 
   if (pendingBulkDraft) {
     if (isConfirmation(text)) {
@@ -135,8 +136,6 @@ export async function handleTextMessage(
     // Not a confirmation/cancellation — clear bulk draft and treat as new intake.
     await clearPendingBulkDraft(db, userId);
   }
-
-  const pendingDraft = await getPendingDraft(db, userId);
 
   if (pendingDraft) {
     if (isConfirmation(text)) {

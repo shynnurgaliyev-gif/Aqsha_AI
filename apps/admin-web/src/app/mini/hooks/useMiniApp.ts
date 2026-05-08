@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { getTelegramWebApp } from '@/lib/telegram';
 
 const API = (process.env['NEXT_PUBLIC_API_URL'] ?? 'https://aqsha-ai-bot-api.onrender.com').replace(/\/$/, '');
 const TOKEN_KEY = 'aqsha_mini_token';
 const TOKEN_EXP_KEY = 'aqsha_mini_token_exp';
+/** Hard cap on auth retry chain to prevent a 401 → re-auth → 401 hot loop. */
+const MAX_AUTH_RETRIES = 2;
 
 export type MiniPhase = 'loading' | 'not_registered' | 'paywall' | 'shell' | 'error';
 export type MiniTab = 'dashboard' | 'transactions' | 'analytics' | 'profile';
@@ -109,6 +111,8 @@ export function useMiniApp() {
   const [data, setData] = useState<MiniData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Counts consecutive 401 → re-auth attempts. Resets on any non-401 response.
+  const authRetryCount = useRef(0);
 
   // Authenticate with Telegram initData
   const authenticate = useCallback(async () => {
@@ -203,10 +207,20 @@ export function useMiniApp() {
       if (res.status === 401) {
         localStorage.removeItem(TOKEN_KEY);
         localStorage.removeItem(TOKEN_EXP_KEY);
+        if (authRetryCount.current >= MAX_AUTH_RETRIES) {
+          // Avoid 401 → auth → 401 hot loop. Surface a hard error instead.
+          authRetryCount.current = 0;
+          setPhase('error');
+          setError('Не удалось авторизоваться. Откройте Mini App заново через бота.');
+          return;
+        }
+        authRetryCount.current += 1;
         setPhase('loading');
         authenticate();
         return;
       }
+      // Any non-401 response means the auth chain succeeded; reset the counter.
+      authRetryCount.current = 0;
       if (!res.ok) {
         setError(`Ошибка сервера: ${res.status}`);
         return;
