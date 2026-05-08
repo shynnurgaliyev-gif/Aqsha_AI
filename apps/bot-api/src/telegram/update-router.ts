@@ -13,11 +13,6 @@ import {
   handleBillingUsePhone,
   handleBillingChangePhone,
 } from '../billing/billing-service';
-import { parseExportCallback } from './export/export-matcher';
-import { handleExportRequest } from './export/export-handler';
-import { sendDocument } from './telegram-client';
-import { handleBulkDeleteCallback, handleDeleteCallback, handleCorrectionCallback } from './transaction-correction/correction-handler';
-import { handleRecurringTimeCallback, handleRecurringRecordCallback, handleRecurringDeleteCallback } from './recurring/recurring-handler';
 import { handleTextMessage, CONFIRMATION_KEYBOARD } from './text-intake/handler';
 import { getVoiceTranscript } from './voice-intake/handler';
 import {
@@ -29,13 +24,13 @@ import {
 import { handleChat } from './chat/chat-handler';
 import { getChatHistory, setChatHistory } from './chat/chat-session';
 import { sendMessage, answerCallbackQuery } from './telegram-client';
-import { getPendingDraft, clearPendingDraft, getPendingBulkDraft, clearPendingBulkDraft } from './text-intake/session-draft';
-import { insertConfirmedTransaction, insertConfirmedBulkTransactions } from './text-intake/transaction-inserter';
+import { insertConfirmedBulkTransactions } from './text-intake/transaction-inserter';
 import { getBudgetStatus } from './budgets/budget-repository';
 import { formatBudgetAlert } from './budgets/budget-formatter';
 import { ONBOARDING_MESSAGE, miniAppKeyboard } from './help/help-formatter';
-import { runTextHandlers } from './dispatch/dispatcher';
+import { runTextHandlers, runCallbackHandlers } from './dispatch/dispatcher';
 import { TEXT_HANDLERS } from './dispatch/text-handlers';
+import { PRE_GATE_CALLBACK_HANDLERS, POST_GATE_CALLBACK_HANDLERS } from './dispatch/callback-handlers';
 
 /**
  * Attempts to handle billing-phone input for the user. Returns true if the
@@ -293,40 +288,15 @@ export async function routeTelegramUpdate(
         await answerCallbackQuery(env.TELEGRAM_BOT_TOKEN, callbackQuery.id, logger);
 
         const data = callbackQuery.data;
+        if (!data) {
+          logger.info({ updateId: update.update_id }, 'Callback query missing data — ignored');
+          break;
+        }
 
-        // ── Billing callbacks — accessible even when blocked ─────────────────
-        if (data === 'billing_pay') {
-          const billingPayResponse = await handleBillingPayCallback(userId, db, env, logger);
-          await sendMessage(env.TELEGRAM_BOT_TOKEN, {
-            chatId,
-            text: billingPayResponse.text,
-            ...(billingPayResponse.reply_markup ? { reply_markup: billingPayResponse.reply_markup } : {}),
-          }, logger);
-          break;
-        }
-        if (data === 'billing_confirm_phone') {
-          const result = await handleBillingConfirmPhone(userId, db, env, logger);
-          await sendMessage(env.TELEGRAM_BOT_TOKEN, {
-            chatId,
-            text: result.text,
-            ...(result.reply_markup ? { reply_markup: result.reply_markup } : {}),
-          }, logger);
-          break;
-        }
-        if (data === 'billing_use_phone') {
-          const result = await handleBillingUsePhone(userId, db, env, logger);
-          await sendMessage(env.TELEGRAM_BOT_TOKEN, {
-            chatId,
-            text: result.text,
-            ...(result.reply_markup ? { reply_markup: result.reply_markup } : {}),
-          }, logger);
-          break;
-        }
-        if (data === 'billing_change_phone') {
-          const result = await handleBillingChangePhone(userId, db, logger);
-          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: result.text }, logger);
-          break;
-        }
+        const cbCtx = { data, chatId, userId, db, env, logger };
+
+        // ── Pre-gate billing callbacks — accessible even when blocked ────────
+        if (await runCallbackHandlers(cbCtx, PRE_GATE_CALLBACK_HANDLERS)) break;
 
         // ── Access gate ──────────────────────────────────────────────────────
         if (checkSubscriptionAccess(currentPlanStatus) === 'blocked') {
@@ -334,124 +304,10 @@ export async function routeTelegramUpdate(
           break;
         }
 
-        if (data === 'confirm' || data === 'cancel') {
-          // ── Bulk draft takes priority over single draft ──────────────────────
-          const bulkDraft = await getPendingBulkDraft(db, userId);
-          if (bulkDraft) {
-            if (data === 'confirm') {
-              await insertConfirmedBulkTransactions(db, userId, bulkDraft.items);
-              await clearPendingBulkDraft(db, userId);
-              logger.info({ updateId: update.update_id, userId, count: bulkDraft.items.length }, 'Bulk transactions confirmed via inline button');
-              const total = bulkDraft.items.reduce((sum, i) => sum + i.amount, 0);
-              const totalFmt = total.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0');
-              await sendMessage(env.TELEGRAM_BOT_TOKEN, {
-                chatId,
-                text: `✅ Записано ${bulkDraft.items.length} операций на ${totalFmt} ₸`,
-              }, logger);
-              // Budget alerts for expense items
-              for (const item of bulkDraft.items) {
-                if (item.kind === 'expense') {
-                  try {
-                    const budgetStatus = await getBudgetStatus(db, userId, item.categoryId);
-                    if (budgetStatus && budgetStatus.remaining < 0) {
-                      await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: formatBudgetAlert(budgetStatus) }, logger);
-                    }
-                  } catch (err) {
-                    logger.warn({ err }, 'Budget alert check failed — skipping');
-                  }
-                }
-              }
-            } else {
-              await clearPendingBulkDraft(db, userId);
-              logger.info({ updateId: update.update_id, userId }, 'Bulk draft cancelled via inline button');
-              await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: '❌ Отменено.' }, logger);
-            }
-            break;
-          }
+        // ── Post-gate callbacks ──────────────────────────────────────────────
+        if (await runCallbackHandlers(cbCtx, POST_GATE_CALLBACK_HANDLERS)) break;
 
-          // ── Single draft ─────────────────────────────────────────────────────
-          const draft = await getPendingDraft(db, userId);
-
-          if (!draft) {
-            // Draft expired or was already handled.
-            await sendMessage(env.TELEGRAM_BOT_TOKEN, {
-              chatId,
-              text: '⏱ Время подтверждения истекло. Отправь транзакцию заново.',
-            }, logger);
-            break;
-          }
-
-          if (data === 'confirm') {
-            await insertConfirmedTransaction(db, userId, draft);
-            await clearPendingDraft(db, userId);
-            logger.info({ updateId: update.update_id, userId, amount: draft.amount }, 'Transaction confirmed via inline button');
-            const savedEmoji = draft.kind === 'expense' ? '📤' : '📥';
-            const savedLabel = draft.kind === 'expense' ? 'Расход записан' : 'Доход записан';
-            const amountFmt = draft.amount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0');
-            await sendMessage(env.TELEGRAM_BOT_TOKEN, {
-              chatId,
-              text: `${savedEmoji} ${savedLabel}!\n💵 Сумма: ${amountFmt} ₸\n📁 Категория: ${draft.categoryName}`,
-            }, logger);
-            if (draft.kind === 'expense') {
-              try {
-                const budgetStatus = await getBudgetStatus(db, userId, draft.categoryId);
-                if (budgetStatus && budgetStatus.remaining < 0) {
-                  await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: formatBudgetAlert(budgetStatus) }, logger);
-                }
-              } catch (err) {
-                logger.warn({ err }, 'Budget alert check failed — skipping');
-              }
-            }
-          } else {
-            await clearPendingDraft(db, userId);
-            logger.info({ updateId: update.update_id, userId }, 'Transaction cancelled via inline button');
-            await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: '❌ Отменено.' }, logger);
-          }
-        } else if (data === 'del_yes' || data === 'del_no') {
-          const action = data === 'del_yes' ? 'yes' : 'no';
-          const delResult = await handleDeleteCallback(action, userId, db, logger);
-          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: delResult }, logger);
-        } else if (data === 'corr_yes' || data === 'corr_no') {
-          const action = data === 'corr_yes' ? 'yes' : 'no';
-          const corrResult = await handleCorrectionCallback(action, userId, db, logger);
-          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: corrResult }, logger);
-        } else if (data === 'bulk_yes' || data === 'bulk_no') {
-          const action = data === 'bulk_yes' ? 'yes' : 'no';
-          const bulkResult = await handleBulkDeleteCallback(action, userId, db, logger);
-          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: bulkResult }, logger);
-        } else if (data && data.startsWith('rec_time:')) {
-          const hour = parseInt(data.slice('rec_time:'.length), 10);
-          const recTimeResult = await handleRecurringTimeCallback(hour, userId, db, logger);
-          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: recTimeResult }, logger);
-        } else if (data && data.startsWith('rec_record:')) {
-          const recurringId = data.slice('rec_record:'.length);
-          const recRecordResult = await handleRecurringRecordCallback(recurringId, userId, db, logger);
-          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: recRecordResult }, logger);
-        } else if (data && data.startsWith('rec_skip:')) {
-          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: '✓ Пропущено.' }, logger);
-        } else if (data && data.startsWith('rec_del:')) {
-          const recurringId = data.slice('rec_del:'.length);
-          const recDelResult = await handleRecurringDeleteCallback(recurringId, userId, db, logger);
-          await sendMessage(env.TELEGRAM_BOT_TOKEN, { chatId, text: recDelResult }, logger);
-        } else if (data && parseExportCallback(data) !== null) {
-          const period = parseExportCallback(data)!;
-          const exportResult = await handleExportRequest(userId, period, db, logger);
-          if (!exportResult) {
-            await sendMessage(env.TELEGRAM_BOT_TOKEN, {
-              chatId,
-              text: '📭 Нет данных за выбранный период.',
-            }, logger);
-          } else {
-            await sendDocument(env.TELEGRAM_BOT_TOKEN, {
-              chatId,
-              fileBuffer: exportResult.buffer,
-              filename:   exportResult.filename,
-              caption:    exportResult.caption,
-            }, logger);
-          }
-        } else {
-          logger.info({ updateId: update.update_id, data }, 'Unknown callback_query data — ignored');
-        }
+        logger.info({ updateId: update.update_id, data }, 'Unknown callback_query data — ignored');
       }
       break;
     }

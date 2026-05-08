@@ -223,7 +223,10 @@ supabase/migrations/          (13 миграций; см. ниже)
 - 🟢 `apps/admin-web/src/middleware.ts:10-27` — ручной base64-декодер для Edge runtime. `atob` доступен в Edge с 2022 — лишний код, заменимо на `atob(encoded)`.
 
 ### 4. Архитектура
-- ✅ ~~🟡 update-router god-switch для текста~~ — реестр `TextHandler[]` в `dispatch/text-handlers.ts` + `runTextHandlers` в `dispatch/dispatcher.ts`. `dispatchText` теперь 10 строк (registry-walk + text-intake fallback). Добавление новой фичи = одна запись в `TEXT_HANDLERS`. callback_query-флоу пока остаётся switch-style (отдельная задача).
+- ✅ ~~🟡 update-router god-switch~~ — оба пути на реестрах:
+  - текст: `TextHandler[]` в `dispatch/text-handlers.ts` + `runTextHandlers`. `dispatchText` ≈ 10 строк.
+  - callback_query: `CallbackHandler[]` (`{name, match, handle}`) в `dispatch/callback-handlers.ts` с двумя списками — `PRE_GATE_CALLBACK_HANDLERS` (4 billing-флоу для expired-юзеров) и `POST_GATE_CALLBACK_HANDLERS` (9 хэндлеров: confirm/cancel + del/corr/bulk + 4 rec_* + export). `case 'callback_query'` ≈ 30 строк.
+  - `update-router.ts`: 469 → 325 строк. Добавление новой кнопки/команды = одна запись в нужном реестре.
 - ✅ ~~🟡 update-router billing-phone duplicate~~ — извлечён helper `tryHandleBillingPhone(text, chatId, userId, db, env, logger): Promise<boolean>`. Оба места (pre-gate в `case 'message'` и post-gate в `dispatchText`) теперь используют его. Структурно дубликата больше нет; обе точки нужны намеренно (гейт expired-юзеров vs voice-транскрипты).
 - 🟡 `apps/bot-api/src/telegram/voice-intake/handler.ts` — `getVoiceTranscript` (актуальная) и `handleVoiceMessage` (мёртвая) — дублированный пайплайн.
 - 🟡 `apps/bot-api/src/telegram/mini-app/mini-route.ts:202-244` — арифметика месяца (`new Date(year, mon, 1)`) дублирует логику `analytics/period-resolver.ts`. Фикс: расширить `period-resolver` на произвольный `YYYY-MM`.
@@ -342,13 +345,24 @@ supabase/migrations/          (13 миграций; см. ниже)
   - Добавление новой фичи (например, групповая команда для семейных аккаунтов) = одна запись в `TEXT_HANDLERS`.
   - +6 тестов в `dispatch/dispatcher.test.ts`: order, short-circuit, exception propagation, reply pass-through.
 
+**Восьмая итерация:**
+- ✅ **A1.5 (callback dispatcher)** — реестр `CallbackHandler[]` для callback_query:
+  - `dispatch/callback-types.ts`: `CallbackHandler` ({name, match, handle}), `CallbackDispatchContext`. `match(data)` отделён от `handle(ctx)` — дёшево скипает не-свои callback'и до фактического вызова.
+  - `dispatch/callback-handlers.ts`: 4 pre-gate billing-хэндлера (`billing_pay`, `billing_confirm_phone`, `billing_use_phone`, `billing_change_phone`) + 9 post-gate (`confirm/cancel`, `del_yes/no`, `corr_yes/no`, `bulk_yes/no`, 4× `rec_*`, export-period). `confirmCancelDraft` инкапсулирует bulk+single draft логику с budget-alert'ами и возвращает `SENT`.
+  - `dispatch/dispatcher.ts`: `runCallbackHandlers` зеркалит `runTextHandlers` для callback'ов.
+  - `update-router.ts:case 'callback_query'`: 175 → 30 строк. Полная структура: `runCallbackHandlers(PRE_GATE)` → access-gate → `runCallbackHandlers(POST_GATE)` → лог "unknown".
+  - `update-router.ts` суммарно: 469 → 325 строк (-144).
+  - +7 тестов в `dispatch/callback-dispatcher.test.ts`: empty registry, no-match, skip via `match()`, first-match-wins, PASS на matched handler, exception propagation.
+
+`pnpm typecheck` ✓, `pnpm build` ✓. **128 тестов / 11 файлов / ~466ms.**
+
 `pnpm typecheck` ✓, `pnpm build` ✓.
 
 **Что осталось (impact / effort):**
 
-1. **🟡 A1.5 (callback dispatcher)** — реестр для callback_query (сейчас всё ещё switch со многими ветками `confirm`/`del_yes`/`rec_*`/etc). ~2 часа. Доразвитие седьмой итерации.
-2. **🟡 Расширить тесты на DB-функции** — `tryConsumeVoiceQuota`, `activateSubscription` rollback (нужна testcontainers Postgres или Supabase test branch). ~3 часа.
-3. **🟡 Rate limiting** — `@fastify/rate-limit` на `/telegram/webhook`, `/telegram/mini/*`, `/webhooks/billing`. ~1 час.
+1. **🟡 Расширить тесты на DB-функции** — `tryConsumeVoiceQuota`, `activateSubscription` rollback (нужна testcontainers Postgres или Supabase test branch). ~3 часа.
+2. **🟡 Rate limiting** — `@fastify/rate-limit` на `/telegram/webhook`, `/telegram/mini/*`, `/webhooks/billing`. ~1 час.
+3. **🟡 Family accounts** — теперь готов фундамент (реестры хэндлеров + тесты). Можно начинать миграцию схемы (groups, group_members, добавление group_id в transactions/budgets/goals). ~3-5 дней работы.
 4. **🟢 RN1** — Dockerfile + render.yaml entry для admin-web. ~2 часа.
 
 **Деплой-чеклист (после ревью):**
