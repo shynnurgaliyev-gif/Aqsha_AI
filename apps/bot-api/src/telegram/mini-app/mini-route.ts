@@ -3,6 +3,25 @@ import type { AppEnv } from '@aqsha-ai/config';
 import type { DbPool } from '@aqsha-ai/database';
 import { verifyTelegramInitData } from './mini-auth';
 import { createMiniSession, getMiniSessionContext } from './mini-session';
+
+/**
+ * Per-route rate-limit configs. Authoritative constants — keep numbers here
+ * (not scattered across route definitions) so they're easy to audit.
+ *
+ *   /telegram/mini/auth — strict (anti-brute-force on initData verification)
+ *   /telegram/mini/{data,transactions,analytics} — generous, keyed on the
+ *     mini-token so concurrent users from the same IP don't share a budget
+ */
+const RL_AUTH = { max: 10, timeWindow: '1 minute' };
+const RL_DATA = {
+  max: 60,
+  timeWindow: '1 minute',
+  keyGenerator: (req: FastifyRequest): string => {
+    const raw = req.headers['x-mini-auth'];
+    const token = Array.isArray(raw) ? raw[0] : raw;
+    return token ?? req.ip;
+  },
+};
 import { queryBalance, queryPeriodTotal, queryCategoryBreakdownByPeriod, queryRecentTransactions } from '../analytics/analytics-repository';
 import { getUserTimezone } from '../analytics/analytics-repository';
 import { resolvePeriodRange, type DateRange } from '../analytics/period-resolver';
@@ -61,6 +80,7 @@ export function createMiniAppRoute(env: AppEnv, db: DbPool) {
     // ── POST /telegram/mini/auth ─────────────────────────────────────────────
     fastify.post<{ Body: { init_data: string } }>(
       '/telegram/mini/auth',
+      { config: { rateLimit: RL_AUTH } },
       async (req, reply) => {
         const { init_data } = req.body ?? {};
         if (!init_data) {
@@ -113,7 +133,7 @@ export function createMiniAppRoute(env: AppEnv, db: DbPool) {
 
     // ── GET /telegram/mini/data ──────────────────────────────────────────────
     // Returns all data needed to render the Mini App in one request.
-    fastify.get('/telegram/mini/data', async (req, reply) => {
+    fastify.get('/telegram/mini/data', { config: { rateLimit: RL_DATA } }, async (req, reply) => {
       const userId = await requireMiniAuth(db, req, reply);
       if (!userId) return;
 
@@ -178,6 +198,7 @@ export function createMiniAppRoute(env: AppEnv, db: DbPool) {
     // Defaults to current calendar month when params are omitted.
     fastify.get<{ Querystring: { from?: string; to?: string } }>(
       '/telegram/mini/transactions',
+      { config: { rateLimit: RL_DATA } },
       async (req, reply) => {
       const userId = await requireMiniAuth(db, req, reply);
       if (!userId) return;
@@ -235,6 +256,7 @@ export function createMiniAppRoute(env: AppEnv, db: DbPool) {
     // Analytics for a specific month: ?month=YYYY-MM  (defaults to current).
     fastify.get<{ Querystring: { month?: string } }>(
       '/telegram/mini/analytics',
+      { config: { rateLimit: RL_DATA } },
       async (req, reply) => {
         const userId = await requireMiniAuth(db, req, reply);
         if (!userId) return;

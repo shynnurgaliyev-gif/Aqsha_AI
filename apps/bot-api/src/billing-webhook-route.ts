@@ -19,7 +19,16 @@ export function createBillingWebhookRoute(env: AppEnv, db: DbPool) {
   return async function (fastify: FastifyInstance): Promise<void> {
     fastify.post(
       '/webhooks/billing',
-      { config: { rawBody: true } },
+      {
+        // rawBody capture happens in app.ts:addContentTypeParser — no per-route
+        // config flag is needed (the previous one was a no-op annotation).
+        config: {
+          // ApiPay/TipTopPay use a fixed pool of webhook IPs. 30/min per IP
+          // is well above any realistic legitimate volume; tighter than the
+          // global default to limit blast radius if the webhook secret leaks.
+          rateLimit: { max: 30, timeWindow: '1 minute' },
+        },
+      },
       async (req: FastifyRequest, reply: FastifyReply) => {
         const logger = req.log;
 

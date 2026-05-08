@@ -218,7 +218,12 @@ supabase/migrations/          (13 миграций; см. ниже)
 - ✅ ~~🟡 mini-route.ts валидация date~~ — `?from=`/`?to=` проверяются по `^\d{4}-\d{2}-\d{2}$`, иначе 400.
 - ✅ ~~🟡 mini-route.ts CORS fallback на `*`~~ — закрыто на уровне env validation: `parseEnv` теперь требует `TELEGRAM_MINIAPP_URL` при `NODE_ENV=production` (zod `superRefine`). В dev fallback на `*` остаётся для локального тестирования.
 - ✅ ~~🟡 mini-auth.ts initData maxAge 24ч~~ — снижено до 1ч (3600s).
-- 🟡 нет rate-limiting на `/telegram/webhook`, `/telegram/mini/*`, `/webhooks/billing`. Кто-то с правильным секретом или валидным initData может закидать. Фикс: `@fastify/rate-limit` с разумными лимитами.
+- ✅ ~~🟡 нет rate-limiting на эндпоинтах~~ — `@fastify/rate-limit` зарегистрирован глобально (200/мин per IP), per-route override:
+  - `/telegram/mini/auth` — 10/мин per IP (anti-brute-force initData)
+  - `/telegram/mini/{data,transactions,analytics}` — 60/мин per X-Mini-Auth token (concurrent users from one NAT не делят бюджет)
+  - `/webhooks/billing` — 30/мин per IP (защита если secret утечёт)
+  - `/health`, `/` — exempt (Render uptime check)
+  - `/telegram/webhook` — на глобальном дефолте 200/мин (Telegram сам лимитит исходящий)
 - ✅ ~~🟡 text-intake без лимита длины ввода~~ — hard-cap 1000 символов в начале `handleTextMessage`. Новый `IntakeResult.kind='rejected'` короткозамыкает chat-fallback (не зовёт OpenAI). Защита от пасты длинных текстов и абьюза токенов.
 - 🟢 `apps/admin-web/src/middleware.ts:10-27` — ручной base64-декодер для Edge runtime. `atob` доступен в Edge с 2022 — лишний код, заменимо на `atob(encoded)`.
 
@@ -345,6 +350,9 @@ supabase/migrations/          (13 миграций; см. ниже)
   - Добавление новой фичи (например, групповая команда для семейных аккаунтов) = одна запись в `TEXT_HANDLERS`.
   - +6 тестов в `dispatch/dispatcher.test.ts`: order, short-circuit, exception propagation, reply pass-through.
 
+**Девятая итерация:**
+- ✅ **Rate limiting** — `@fastify/rate-limit@10` подключён, дефолт 200/мин per IP с `skipOnError: true`. Per-route configs: auth 10/мин, data 60/мин per token, billing webhook 30/мин, health открыт. Удалён мёртвый `config: { rawBody: true }` (фактический rawBody capture идёт через addContentTypeParser).
+
 **Восьмая итерация:**
 - ✅ **A1.5 (callback dispatcher)** — реестр `CallbackHandler[]` для callback_query:
   - `dispatch/callback-types.ts`: `CallbackHandler` ({name, match, handle}), `CallbackDispatchContext`. `match(data)` отделён от `handle(ctx)` — дёшево скипает не-свои callback'и до фактического вызова.
@@ -361,9 +369,8 @@ supabase/migrations/          (13 миграций; см. ниже)
 **Что осталось (impact / effort):**
 
 1. **🟡 Расширить тесты на DB-функции** — `tryConsumeVoiceQuota`, `activateSubscription` rollback (нужна testcontainers Postgres или Supabase test branch). ~3 часа.
-2. **🟡 Rate limiting** — `@fastify/rate-limit` на `/telegram/webhook`, `/telegram/mini/*`, `/webhooks/billing`. ~1 час.
-3. **🟡 Family accounts** — теперь готов фундамент (реестры хэндлеров + тесты). Можно начинать миграцию схемы (groups, group_members, добавление group_id в transactions/budgets/goals). ~3-5 дней работы.
-4. **🟢 RN1** — Dockerfile + render.yaml entry для admin-web. ~2 часа.
+2. **🟡 Family accounts** — теперь готов фундамент (реестры хэндлеров + тесты + rate limit). Можно начинать миграцию схемы (groups, group_members, добавление group_id в transactions/budgets/goals). ~3-5 дней работы.
+3. **🟢 RN1** — Dockerfile + render.yaml entry для admin-web. ~2 часа.
 
 **Деплой-чеклист (после ревью):**
 - Применить миграции через Supabase SQL Editor (порядок важен):

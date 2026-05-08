@@ -1,4 +1,5 @@
 import Fastify, { type FastifyInstance } from 'fastify';
+import rateLimit from '@fastify/rate-limit';
 import type { AppEnv } from '@aqsha-ai/config';
 import type { DbPool } from '@aqsha-ai/database';
 import { createWebhookRoute } from './telegram/webhook-route';
@@ -16,6 +17,19 @@ export function createApp(env: AppEnv, db: DbPool): FastifyInstance {
     logger: {
       level: env.LOG_LEVEL,
     },
+  });
+
+  // ── Rate limiting ─────────────────────────────────────────────────────────
+  // Defense-in-depth: every endpoint is rate-limited by IP. Per-route configs
+  // tighten or relax the budget (see mini-route.ts, billing-webhook-route.ts,
+  // and webhook-route.ts). The global default is generous because legitimate
+  // Telegram webhook traffic from a single IP can burst.
+  void app.register(rateLimit, {
+    global: true,
+    max: 200,
+    timeWindow: '1 minute',
+    // Avoid hanging requests when the in-memory store hiccups.
+    skipOnError: true,
   });
 
   // Capture raw request body as string before JSON parsing.
@@ -36,9 +50,11 @@ export function createApp(env: AppEnv, db: DbPool): FastifyInstance {
   );
 
   // ── Health ──────────────────────────────────────────────────────────────────
+  // Exempt from rate limiting — Render's uptime check pings these on a fixed
+  // interval and must never be throttled.
   const healthResponse = { status: 'ok', service: env.APP_NAME, env: env.NODE_ENV };
-  app.get('/health', async () => healthResponse);
-  app.get('/', async () => healthResponse);       // Render pings root before /health
+  app.get('/health', { config: { rateLimit: false } }, async () => healthResponse);
+  app.get('/', { config: { rateLimit: false } }, async () => healthResponse);
 
   // ── Telegram webhook ─────────────────────────────────────────────────────────
   void app.register(createWebhookRoute(env, db));
