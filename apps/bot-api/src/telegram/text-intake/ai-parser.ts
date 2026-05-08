@@ -81,8 +81,11 @@ interface AiChatResponse {
  * Validates the raw JSON value returned by the model.
  * Returns a ParsedIntake if the result contains a valid transaction,
  * or null if the model indicated no transaction or output is malformed.
+ *
+ * Exported for unit testing — this is a critical safety boundary that
+ * decides whether LLM output is allowed to drive a financial write.
  */
-function validateAiResult(raw: unknown, originalText: string): ParsedIntake | null {
+export function validateAiResult(raw: unknown, originalText: string): ParsedIntake | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
 
   const outer = raw as Record<string, unknown>;

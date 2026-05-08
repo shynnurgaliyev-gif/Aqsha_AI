@@ -59,6 +59,10 @@ jobs:
       - name: Build @aqsha-ai/database
         run: pnpm --filter @aqsha-ai/database build
 
+      # ── Tests — pure-function unit tests (Vitest) ────────────────────────
+      - name: Run unit tests
+        run: pnpm test
+
       # ── Apps — typecheck then build ──────────────────────────────────────
       - name: Typecheck @aqsha-ai/bot-api
         run: pnpm --filter @aqsha-ai/bot-api typecheck

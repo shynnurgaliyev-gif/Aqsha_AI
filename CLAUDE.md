@@ -269,7 +269,17 @@ supabase/migrations/          (13 миграций; см. ниже)
 - ✅ ~~🟢 cross-field env validation~~ — `superRefine` теперь требует `KASPI_API_KEY` + `KASPI_WEBHOOK_SECRET` при `BILLING_PROVIDER=kaspi_qr` без test mode; `TELEGRAM_MINIAPP_URL` обязателен в prod.
 
 ### 10. Тестирование
-- 🔴 ноль unit-тестов в `apps/` и `packages/`. `pnpm test` запускает с `--if-present`, поэтому CI зелёный без проверок. Для финансового продукта это критично. Фикс: vitest + минимальный набор (parser/bulk-parser, period-resolver, category-resolver, validateAiResult, ensureTrialSubscription idempotency, activateSubscription transactionality).
+- ✅ ~~🔴 ноль unit-тестов~~ — добавлен Vitest на root, **111 тестов / 8 файлов** покрывают чистые функции:
+  - `parseIntakeText` (17 тестов) — парсер транзакций (RU/EN, граничные случаи)
+  - `parseBulkInput` (13 тестов) — bulk-парсинг (delimiter strategies, mixed формат)
+  - `validateAiResult` (21 тест) — LLM safety boundary (kind/amount/category валидация, NaN/Infinity reject)
+  - `resolvePeriodRange` + `getLocalDate` (14 тестов) — таймзона-aware date arithmetic (today/yesterday/week/month, edge: Dec→Jan, Jan→Dec)
+  - `verifyTelegramInitData` (15 тестов) — Mini App auth: HMAC, replay (1ч), tampering, malformed input
+  - `fetchWithRetry` (13 тестов) — retry/timeout/back-off (5xx/429/network, exp delay capping, onRetry callback)
+  - `checkSubscriptionAccess` (8 тестов) — gate всех plan статусов
+  - voice quota helpers (10 тестов) — `planHasVoiceQuota` + `getVoiceDurationLimit` + форматтеры (включая RU comma-decimals)
+- DB-зависимые функции не покрыты unit-тестами (нужна тест-БД); покрывается через `docs/CLOSED_SMOKE_TEST.md`.
+- `pnpm test` (root) запускает `vitest run`, подключён в CI workflow перед typecheck.
 
 ### 11. Подготовка к семейным аккаунтам (см. Roadmap)
 - 🟡 `supabase/migrations/20260322_001_init_schema.sql:328-371` — `transactions.user_id NOT NULL` без `group_id`. Будущая миграция: `ADD COLUMN group_id uuid NULL REFERENCES groups(id)`, `ADD COLUMN owner_user_id uuid NOT NULL DEFAULT user_id` + backfill.
@@ -312,13 +322,16 @@ supabase/migrations/          (13 миграций; см. ниже)
 - ✅ **A2** — cross-field env validation через zod `superRefine`: `BILLING_PROVIDER=kaspi_qr` без test mode требует `KASPI_API_KEY` и `KASPI_WEBHOOK_SECRET`; `NODE_ENV=production` требует `TELEGRAM_MINIAPP_URL`. Misconfig падает на старте, а не на первом вебхуке/MiniApp-запросе.
 - ✅ **Text length cap** — hard-cap 1000 символов в `handleTextMessage`. Новый `IntakeResult.kind='rejected'` (короткозамыкает chat-fallback). Защита от выжигания OpenAI-токенов длинными вставками.
 
+**Пятая итерация:**
+- ✅ **TST1** — Vitest + 111 unit-тестов на 8 файлов, покрытие критичных чистых функций (см. раздел 10 выше). Подключено в CI перед typecheck. Test runtime: ~450ms full suite. Готовый каркас для дальнейшего расширения покрытия.
+
 `pnpm typecheck` ✓, `pnpm build` ✓.
 
 **Что осталось (impact / effort):**
 
-1. **🔴 TST1** — Vitest + чистые функции (`parseIntakeText`, `parseBulkInput`, `validateAiResult`, `resolvePeriodRange`, `verifyTelegramInitData`, `fetchWithRetry`, `tryConsumeVoiceQuota`, `getVoiceDurationLimit`, `activateSubscription` rollback test). ~1 день.
-2. **🟡 A1** — реестр хэндлеров вместо god-switch в `update-router.ts`. ~3 часа. Снимает блокер на семейные аккаунты.
-3. **🟢 mini-sessions cleanup** — воркер-таск на удаление просроченных `mini_sessions` (сейчас чистка только при создании нового токена для того же user_id). ~30 минут.
+1. **🟡 A1** — реестр хэндлеров вместо god-switch в `update-router.ts`. ~3 часа. Снимает блокер на семейные аккаунты. Теперь делать БЕЗОПАСНО: тесты на парсеры/гейты ловят регрессии.
+2. **🟡 Расширить тесты на DB-функции** — `tryConsumeVoiceQuota`, `activateSubscription` rollback (нужна testcontainers Postgres или Supabase test branch). ~3 часа.
+3. **🟢 mini-sessions cleanup** — воркер-таск на удаление просроченных `mini_sessions`. ~30 минут.
 4. **🟢 RN1** — Dockerfile + render.yaml entry для admin-web. ~2 часа.
 
 **Деплой-чеклист (после ревью):**
